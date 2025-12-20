@@ -57,10 +57,10 @@ function ProtectedLayout() {
   const user = effectiveSession.user;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center select-none">
+    <div className="min-h-full min-w-screen bg-gray-50 flex flex-col items-center select-none">
       {isHome && (
         <>
-          <header className="absolute top-4 right-4 z-10 animate-fade-in">
+          <header className="  absolute top-4 right-4 z-10 animate-fade-in">
             <div className="relative group">
               <button className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
                 {user.image ? (

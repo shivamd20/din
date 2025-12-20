@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/lib/auth-client.ts","./server/usertimelinedo.ts","./server/auth.ts","./server/index.ts","./server/db/schema.ts","./worker-configuration.d.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/loginpage.tsx","./src/lib/auth-client.ts","./server/usertimelinedo.ts","./server/auth.ts","./server/index.ts","./server/db/schema.ts","./worker-configuration.d.ts"],"version":"5.9.3"}

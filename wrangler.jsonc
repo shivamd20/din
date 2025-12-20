@@ -19,8 +19,11 @@
 		}
 	],
 	"assets": {
-		// The path to the directory containing the `index.html` file to be served at `/`
-		"directory": "./public"
+		"directory": "./public",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": [
+			"/api/*"
+		]
 	},
 	"durable_objects": {
 		"bindings": [
@@ -38,7 +41,7 @@
 			"binding": "liva_db",
 			"database_name": "liva-db",
 			"database_id": "afc565c7-a861-4c2a-9686-40a905c483a4",
-			"remote": false
+			"remote": true
 		}
 	],
 	"observability": {

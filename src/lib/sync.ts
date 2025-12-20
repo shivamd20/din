@@ -63,7 +63,7 @@ export async function syncQueue() {
                 }
 
                 // 2. Sync Entry to Server
-                await trpcClient.log.create.mutate({
+                const result = await trpcClient.log.create.mutate({
                     entryId: entry.id,
                     text: entry.text,
                     attachments: updatedAttachments.map(a => ({
@@ -72,11 +72,36 @@ export async function syncQueue() {
                         type: a.type,
                         mimeType: a.mimeType,
                         name: a.name
-                    }))
+                    })),
+                    rootId: entry.rootId,
+                    parentId: entry.parentId,
+                    // pass followUp provenance if it exists
+                    followUp: entry.followUp
                 });
 
-                // Mark as synced
-                await db.entries.update(entry.id, { synced: 1 });
+                // Mark as synced AND save any followUps returned
+                let updates: any = { synced: 1 };
+
+                if (result.followUps && result.followUps.length > 0) {
+                    // We store them in a temporary field or rely on App.tsx finding them?
+                    // Db schema doesn't have 'suggestedChips'.
+                    // WE need to add it to DB 'entries' or 'temp_state'.
+                    // For now, let's append them to a new field 'generated_suggestions' in Entry?
+                    // Or, since App.tsx is waiting, we can broadcast?
+                    // Dexie liveQuery would update if we save to DB.
+                    // Let's add 'generated_suggestions' to Entry interface in DB?
+                    // Actually, I'll store it in `follow_up_provenance_json` or similar? 
+                    // No, that's for what WAS clicked.
+
+                    // I will hack: Add `transientSuggestions` to Entry interface.
+                    updates.transientSuggestions = result.followUps;
+                }
+
+                if ((result as any).analysis) {
+                    updates.transientAnalysis = (result as any).analysis;
+                }
+
+                await db.entries.update(entry.id, updates);
             } catch (err) {
                 console.error("Sync failed for entry", entry.id, err);
                 // Keep synced=0, will retry next time
@@ -121,7 +146,9 @@ export async function pullFromServer() {
                     created_at: sEntry.created_at as number,
                     text: sEntry.raw_text as string,
                     attachments: attachments, // Remote attachments will have keys, no blobs
-                    synced: 1 // It came from server, so it is synced
+                    synced: 1, // It came from server, so it is synced
+                    rootId: (sEntry.root_id as string) || (sEntry.entry_id as string),
+                    parentId: sEntry.parent_id as string | undefined
                 });
             }
         });

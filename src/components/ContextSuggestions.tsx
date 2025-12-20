@@ -1,59 +1,61 @@
 import { useState } from "react";
-import { db } from "../lib/db";
-import { syncQueue } from "../lib/sync";
 
-export function ContextSuggestions({ entryId, onComplete }: { entryId: string, onComplete: () => void }) {
-    const [step, setStep] = useState(0);
-    // Hardcoded for now, as per spec "generated", but we need AI for real logic.
-    // For Phase 1 "mocked/initial", rotating static chips is acceptable if offline.
-    // Ideally these come from the server response if online, but offline-first means we might need local heuristics or just generic ones.
-    const suggestions = [
-        ["What did you eat?", "When was this?", "How did it feel?", "Anything unusual?"],
-        ["Who were you with?", "Where were you?", "Energy level?"]
-    ];
+interface Suggestion {
+    chipId: string;
+    chipLabel: string;
+    generationId: string;
+}
 
-    const currentChips = suggestions[step % suggestions.length];
+export function ContextSuggestions({ suggestions, analysis, onReply, onComplete, loading }: {
+    suggestions: Suggestion[],
+    analysis?: string,
+    onComplete: () => void,
+    onReply: (chip: { label: string, id: string, generationId: string }) => void,
+    loading?: boolean
+}) {
+    const [isVisible, setIsVisible] = useState(true);
 
-    const handleAppend = async (text: string) => {
-        try {
-            // Appending logic: fetch, append text, save.
-            const entry = await db.entries.get(entryId);
-            if (entry) {
-                const newText = entry.text + "\n" + text;
-                await db.entries.update(entryId, {
-                    text: newText,
-                    synced: 0
-                });
-                syncQueue();
-            }
+    if (loading) {
+        return (
+            <div className="flex justify-center w-full py-4 animate-pulse">
+                <span className="text-sm text-zinc-400 font-medium">Analyzing...</span>
+            </div>
+        );
+    }
 
-            if (step >= 1) { // Max 2 interactions (0, 1)
-                onComplete();
-            } else {
-                setStep(s => s + 1);
-            }
-        } catch (e) {
-            console.error("Failed to append context", e);
-        }
-    };
+    const hasSuggestions = suggestions && suggestions.length > 0;
+    if (!isVisible || (!hasSuggestions && !analysis)) {
+        return null;
+    }
 
     return (
-        <div className="mt-8 animate-fade-in w-full">
-            <h3 className="text-sm font-medium text-zinc-400 mb-4 uppercase tracking-wider">Want to add more context?</h3>
-            <div className="flex flex-wrap gap-2">
-                {currentChips.map(chip => (
-                    <button
-                        key={chip}
-                        onClick={() => handleAppend(chip)}
-                        className="px-4 py-2 bg-white border border-zinc-200 rounded-full text-zinc-600 text-sm hover:bg-zinc-50 hover:border-zinc-300 transition-all active:scale-95"
-                    >
-                        {chip}
-                    </button>
-                ))}
+        <div className="flex flex-col gap-2 w-full animate-fade-in-up">
+            {analysis && (
+                <div className="bg-indigo-50/80 p-3 rounded-2xl border border-indigo-100 text-indigo-700 text-sm font-medium text-center shadow-sm">
+                    {analysis}
+                </div>
+            )}
+            {hasSuggestions && (
+                <div className="flex flex-wrap gap-2 justify-center">
+                    {suggestions.map((s) => (
+                        <button
+                            key={s.chipId}
+                            onClick={() => onReply({ label: s.chipLabel, id: s.chipId, generationId: s.generationId })}
+                            className="px-4 py-2 bg-white border border-indigo-100 shadow-sm rounded-full text-indigo-600 font-medium hover:bg-indigo-50 active:scale-95 transition-all text-sm"
+                        >
+                            {s.chipLabel}
+                        </button>
+                    ))}
+                </div>
+            )}
+            <div className="flex justify-center mt-2">
+                <button
+                    onClick={onComplete}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline decoration-dotted"
+                >
+                    Dismiss
+                </button>
             </div>
-            <button onClick={onComplete} className="mt-6 text-zinc-400 text-sm hover:text-zinc-600 underline">
-                No, I'm done
-            </button>
         </div>
     );
 }

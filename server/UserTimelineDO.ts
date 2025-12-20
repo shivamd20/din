@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { AIService } from "./ai-service";
 
 interface Env {
     AI: any;
@@ -6,10 +7,12 @@ interface Env {
 
 export class UserTimelineDO extends DurableObject<Env> {
     sql: DurableObjectState["storage"]["sql"];
+    aiService: AIService;
 
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
+        this.aiService = new AIService(env.AI);
 
         this.initializeSchema();
     }
@@ -18,17 +21,12 @@ export class UserTimelineDO extends DurableObject<Env> {
         this.sql.exec(`
             CREATE TABLE IF NOT EXISTS entries (
                 entry_id TEXT PRIMARY KEY,
+                root_id TEXT,
+                parent_id TEXT,
                 created_at INTEGER,
                 raw_text TEXT,
-                attachments_json TEXT DEFAULT '[]'
-            );
-            CREATE TABLE IF NOT EXISTS parses (
-                entry_id TEXT,
-                parsed_json TEXT,
-                model_version TEXT,
-                prompt_version TEXT,
-                created_at INTEGER,
-                PRIMARY KEY (entry_id, model_version)
+                attachments_json TEXT DEFAULT '[]',
+                follow_up_provenance_json TEXT
             );
             CREATE TABLE IF NOT EXISTS daily_summary (
                 date TEXT PRIMARY KEY,
@@ -38,75 +36,98 @@ export class UserTimelineDO extends DurableObject<Env> {
             );
         `);
 
-        // Migration for v1 (adding attachments)
+        // Migrations
         try {
             this.sql.exec("ALTER TABLE entries ADD COLUMN attachments_json TEXT DEFAULT '[]'");
-        } catch (e) {
-            // Column likely exists
-        }
+        } catch (e) { /* Column likely exists */ }
+
+        try {
+            this.sql.exec("ALTER TABLE entries ADD COLUMN root_id TEXT");
+            this.sql.exec("ALTER TABLE entries ADD COLUMN parent_id TEXT");
+            this.sql.exec("ALTER TABLE entries ADD COLUMN follow_up_provenance_json TEXT");
+        } catch (e) { /* Columns likely exist */ }
     }
 
-    async log(data: { entryId: string, text: string, attachments?: any[] }) {
-        const { entryId, text, attachments = [] } = data;
+    async log(data: {
+        entryId: string,
+        text: string,
+        attachments?: any[],
+        rootId?: string,
+        parentId?: string,
+        followUp?: any
+    }) {
+        const { entryId, text, attachments = [], rootId, parentId, followUp } = data;
         const now = Date.now();
 
-        // Idempotency & Sync: UPSERT strategy.
-        // If entry exists (e.g. from offline sync), we update the text to match client state.
-        // This handles "Append" scenarios where client syncs the full updated text.
+        // Default rootId to entryId (self) if not provided -> Root Entry
+        const finalRootId = rootId || entryId;
+
         this.sql.exec(
-            `INSERT INTO entries (entry_id, created_at, raw_text, attachments_json) 
-             VALUES (?, ?, ?, ?)
+            `INSERT INTO entries (entry_id, root_id, parent_id, created_at, raw_text, attachments_json, follow_up_provenance_json) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(entry_id) DO UPDATE SET 
              raw_text = excluded.raw_text,
-             attachments_json = excluded.attachments_json`,
+             attachments_json = excluded.attachments_json,
+             root_id = excluded.root_id,
+             parent_id = excluded.parent_id`,
             entryId,
+            finalRootId,
+            parentId || null,
             now,
             text,
-            JSON.stringify(attachments)
+            JSON.stringify(attachments),
+            followUp ? JSON.stringify(followUp) : null
         );
 
-        // Always schedule AI on write/update
-        this.scheduleAI(entryId, text);
+        // Generate Follow-Ups (Server-side AI)
+        // We only generate follow-ups for Root entries (depth 0) or 1st reply (depth 1), 
+        // assuming max depth 2.
+        // Also checks suppression.
+        let chips: { chipId: string, chipLabel: string, generationId: string }[] = [];
 
-        return { entryId, confirmation: "Captured." };
+        // Only generate if it's a root entry or first reply, AND user has internet 
+        // (implied by reaching here).
+        // Spec says: "Follow-up generation is triggered async". 
+        // For Phase 2 we return it inline if fast enough, or client handles "async" via polling/push.
+        // For simplicity now, we await it.
+        const recentContext = await this.getRecentContext(finalRootId);
+
+        const aiResult = await this.aiService.generateFollowUp(text, recentContext);
+        chips = aiResult.chips;
+
+        return {
+            entryId,
+            confirmation: "Captured.",
+            followUps: chips,
+            analysis: aiResult.analysis
+        };
+    }
+
+    async getRecentContext(rootId: string): Promise<string[]> {
+        // Get thread history specifically
+        const rows = this.sql.exec("SELECT raw_text FROM entries WHERE root_id = ? ORDER BY created_at ASC", rootId).toArray() as { raw_text: string }[];
+        return rows.map(r => r.raw_text);
     }
 
     async append(data: { entryId: string, text: string }) {
         const { entryId, text } = data;
-
-        // Append text to existing entry. 
-        // We simply concatenate with a newline for now.
         const existing = this.sql.exec("SELECT raw_text FROM entries WHERE entry_id = ?", entryId).one() as { raw_text: string } | undefined;
 
         if (existing) {
             const newText = existing.raw_text + "\n" + text;
             this.sql.exec("UPDATE entries SET raw_text = ? WHERE entry_id = ?", newText, entryId);
-
-            // Re-schedule AI to process the updated text
-            this.scheduleAI(entryId, newText);
         }
 
         return { ok: true };
     }
 
-    async scheduleAI(entryId: string, text: string) {
-        // AI Logic deferred or inline. Kept simple for now.
-        // In a real production app, this might be a queue. 
-        // Here we just trigger it and don't wait for the result in the main response to keep sync fast.
-
-        // checking for followups could be done here.
-    }
-
-    // ... (Keep existing getToday and other methods if needed for other parts, simplified below)
-
-    async getRecent(limit: number = 50): Promise<{ entry_id: string, created_at: number, raw_text: string, attachments_json: string }[]> {
-        // Fetch most recent entries for syncing/timeline population
+    async getRecent(limit: number = 50): Promise<any[]> {
         return this.sql
             .exec(
                 "SELECT * FROM entries ORDER BY created_at DESC LIMIT ?",
                 limit
             )
-            .toArray() as { entry_id: string, created_at: number, raw_text: string, attachments_json: string }[];
+            .toArray();
     }
 
     async getToday() {

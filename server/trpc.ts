@@ -9,20 +9,33 @@ export interface Context {
 
 const t = initTRPC.context<Context>().create();
 
+const AttachmentSchema = z.object({
+    id: z.string(),
+    key: z.string(),
+    type: z.string(),
+    mimeType: z.string(),
+    name: z.string().optional()
+});
+
+const FollowUpSchema = z.object({
+    chipId: z.string(),
+    chipLabel: z.string(),
+    generationId: z.string()
+});
+
+const LogCreateInput = z.object({
+    entryId: z.string().uuid(),
+    text: z.string(),
+    attachments: z.array(AttachmentSchema).optional(),
+    rootId: z.string().optional(),
+    parentId: z.string().optional(),
+    followUp: FollowUpSchema.optional()
+});
+
 export const appRouter = t.router({
     log: t.router({
         create: t.procedure
-            .input(z.object({
-                entryId: z.string().uuid(),
-                text: z.string(),
-                attachments: z.array(z.object({
-                    id: z.string(),
-                    key: z.string(),
-                    type: z.string(),
-                    mimeType: z.string(),
-                    name: z.string().optional()
-                })).optional()
-            }))
+            .input(LogCreateInput)
             .mutation(async ({ input, ctx }) => {
                 return await ctx.userTimeline.log(input);
             }),
@@ -48,7 +61,8 @@ export const appRouter = t.router({
                 limit: z.number().min(1).max(100).default(50).optional()
             }).optional())
             .query(async ({ input, ctx }) => {
-                return await ctx.userTimeline.getRecent(input?.limit);
+                const timeline: any = ctx.userTimeline;
+                return await timeline.getRecent(input?.limit);
             })
     })
 });

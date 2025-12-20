@@ -10,7 +10,7 @@
 	"migrations": [
 		{
 			"new_sqlite_classes": [
-				"MyDurableObject"
+				"UserTimelineDO"
 			],
 			"tag": "v1"
 		}
@@ -22,14 +22,17 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "MyDurableObject",
-				"name": "MY_DURABLE_OBJECT"
+				"class_name": "UserTimelineDO",
+				"name": "USER_TIMELINE_DO"
 			}
 		]
 	},
+	"ai": {
+		"binding": "AI"
+	},
 	"observability": {
 		"enabled": true
-	}
+	},
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

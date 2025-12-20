@@ -1,8 +1,8 @@
 import React, { useState, useEffect, type FormEvent } from 'react';
 import MDEditor from '@uiw/react-md-editor';
-import { BrowserRouter, Routes, Route, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useSession, signOut, signIn, type Session } from './lib/auth-client';
-import { LogOut, Image, Paperclip, Clock, UserCircle, RefreshCcw } from 'lucide-react';
+import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { useSession, signIn, type Session } from './lib/auth-client';
+import { Image, Paperclip } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Attachment } from './lib/db';
 import { syncQueue, pullFromServer } from './lib/sync';
@@ -14,19 +14,11 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { ContextSuggestions } from './components/ContextSuggestions';
 import TimelinePage from './components/TimelinePage';
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Header } from './components/layout/Header';
+import { GuestBanner } from './components/layout/GuestBanner';
 
 function ProtectedLayout() {
   const { data: session, isPending, error } = useSession();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const isHome = location.pathname === '/';
 
   // Offline Auth: Fallback to cached session
   const [cachedSession, setCachedSession] = useState<Session | null>(() => {
@@ -81,94 +73,20 @@ function ProtectedLayout() {
     return <div className="flex h-screen w-screen items-center justify-center bg-gray-50 text-gray-500">Initializing...</div>;
   }
 
-  const handleLogout = async () => {
-    try {
-      await db.delete();
-    } catch (e) {
-      console.error("Failed to delete DB", e);
-    }
-    localStorage.clear();
-    await signOut();
-    window.location.reload();
-  };
-
   const user = effectiveSession.user;
 
   return (
-    <div className="h-[100dvh] w-full bg-[#f9fafb] flex flex-col overflow-hidden relative touch-none">
-      {isHome && (
-        <header className="flex-none p-4 flex justify-between items-start z-10 bg-transparent pointer-events-none">
-          {/* Left Timeline Button */}
-          <div className="pointer-events-auto">
-            <button
-              onClick={() => navigate('/timeline')}
-              className="p-2 text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-1"
-              title="Timeline"
-            >
-              <Clock className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Right Profile Button */}
-          <div className="pointer-events-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-400 shadow-sm">
-                  <Avatar className="h-9 w-9 border border-gray-200">
-                    <AvatarImage src={user.image || undefined} alt={user.name} />
-                    <AvatarFallback className="bg-gray-200 text-gray-500">
-                      <UserCircle className="w-5 h-5" />
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem
-                  onClick={() => signIn.social({
-                    provider: 'google',
-                    callbackURL: '/'
-                  })}
-                  className="cursor-pointer"
-                >
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  <span>Switch Account</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Logout</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </header>
-      )}
+    <div className="h-[100dvh] w-full bg-[#f9fafb] flex flex-col overflow-hidden relative">
+      <Header />
 
       {/* Main Content Area - Scrollable if internal parts sync, but we want flex-1 layout */}
       <main className="flex-1 w-full max-w-lg mx-auto flex flex-col relative z-0 overflow-hidden">
         <Outlet />
       </main>
 
-      {/* Guest Banner - Moved to Bottom */}
-      {/* @ts-ignore - isAnonymous is added by plugin */}
-      {user.isAnonymous && (
-        <div className="flex-none w-full bg-amber-50/90 backdrop-blur-sm border-t border-amber-100 pb-[env(safe-area-inset-bottom)]">
-          <div className="px-4 py-2 text-xs md:text-sm text-amber-800 text-center flex items-center justify-center gap-2">
-            <span>Guest Account.</span>
-            <button
-              onClick={() => signIn.social({
-                provider: 'google',
-                callbackURL: '/'
-              })}
-              className="underline font-medium hover:text-amber-900"
-            >
-              Sign in to save data
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Guest Banner */}
+      {/* @ts-ignore */}
+      <GuestBanner isAnonymous={user.isAnonymous} />
     </div>
   );
 }

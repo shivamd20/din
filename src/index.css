@@ -11,9 +11,6 @@
   }
 }
 
-body {
-  @apply bg-zinc-50 text-zinc-900 font-sans antialiased min-h-screen flex flex-col items-center pt-12 px-4 selection:bg-zinc-200;
-}
 
 @keyframes fadeIn {
   from {
@@ -145,6 +142,7 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }

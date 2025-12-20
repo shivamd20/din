@@ -1,12 +1,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 import { ExpandableMarkdown } from "./ExpandableMarkdown";
 
 export default function TimelinePage() {
-    const navigate = useNavigate();
-
     // 7. Infinite Scroll (Phase 1: Simple paging/all load for now as per spec "Load entries from IndexedDB")
     const entries = useLiveQuery(() =>
         db.entries.orderBy('created_at').reverse().limit(50).toArray()
@@ -15,16 +11,8 @@ export default function TimelinePage() {
     if (!entries) return null;
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center">
+        <div className="h-full w-full bg-gray-50 flex flex-col items-center overflow-y-auto overscroll-y-contain -webkit-overflow-scrolling-touch">
             {/* 5. Layout */}
-            <header className="w-full max-w-lg pt-6 pb-2 px-4 flex items-center justify-between bg-gray-50 z-10 sticky top-0">
-                <button onClick={() => navigate('/')} className="p-2 -ml-2 text-zinc-400 hover:text-zinc-600">
-                    <ArrowLeft className="w-5 h-5" />
-                </button>
-                <h1 className="text-zinc-400 text-sm font-medium tracking-wide uppercase">Timeline</h1>
-                <div className="w-5" /> {/* Spacer for balance */}
-            </header>
-
             <main className="w-full max-w-lg flex-1 px-4 md:px-0 pb-10 space-y-3">
                 {/* 8. Empty States */}
                 {entries.length === 0 && (

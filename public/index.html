@@ -1,64 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Din</title>
-    <link rel="stylesheet" href="./css/styles.css">
-    <meta name="description" content="Effortless daily logging and AI-powered reflection.">
-    <style>
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-            animation: fadeIn 0.6s ease-out forwards;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Din</title>
+  <meta name="description" content="Effortless daily logging and AI-powered reflection.">
+  <script type="module" crossorigin src="/assets/index-DYyoNiLC.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-MQOXFXL9.css">
 </head>
-<body class="min-h-screen flex flex-col items-center pt-12 px-4 selection:bg-zinc-200">
-    <header class="w-full max-w-lg mb-8 flex justify-between items-center opacity-0 animate-fade-in">
-        <h1 class="text-2xl font-bold tracking-tight text-zinc-800">din</h1>
-        <div id="status-indicator" class="w-2 h-2 rounded-full bg-zinc-300" title="Offline"></div>
-    </header>
 
-    <main class="w-full max-w-lg space-y-8">
-        <!-- Input Section -->
-        <section class="opacity-0 animate-fade-in" style="animation-delay: 100ms;">
-            <div class="glass-panel rounded-2xl p-4 transition-shadow focus-within:shadow-md bg-white border border-zinc-200">
-                <textarea 
-                    id="log-input" 
-                    class="w-full bg-transparent resize-none outline-none text-lg placeholder:text-zinc-400 min-h-[120px]" 
-                    placeholder="How was your day?"
-                    autofocus
-                ></textarea>
-                <div class="flex justify-between items-center mt-2">
-                    <span class="text-xs text-zinc-400" id="char-count">0</span>
-                    <button id="submit-btn" class="px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        Log
-                    </button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Summary Section -->
-        <section id="summary-section" class="hidden opacity-0 animate-fade-in">
-            <h2 class="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Today's Reflection</h2>
-            <div id="summary-content" class="p-4 rounded-2xl bg-white border border-zinc-100 shadow-sm text-zinc-700 leading-relaxed">
-                <!-- Summary inserted here -->
-            </div>
-        </section>
-
-        <!-- History/Stream Section -->
-        <section id="history-section" class="space-y-4 opacity-0 animate-fade-in" style="animation-delay: 200ms;">
-            <!-- History entries will be injected here -->
-        </section>
-    </main>
-
-    <footer class="mt-auto py-8 text-center text-xs text-zinc-400">
-        <p>&copy; 2024 Din</p>
-    </footer>
-
-    <script type="module" src="./js/app.js"></script>
+<body>
+  <div id="root"></div>
 </body>
+
 </html>

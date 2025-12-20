@@ -1,19 +1,24 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import LoginPage from './components/LoginPage';
 import { useSession, signOut, type Session } from './lib/auth-client';
-import { LogOut, Image, Paperclip } from 'lucide-react';
+import { LogOut, Image, Paperclip, Clock } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './lib/db';
-import { syncQueue } from './lib/sync';
+import { syncQueue, pullFromServer } from './lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ContextSuggestions } from './components/ContextSuggestions';
+import TimelinePage from './components/TimelinePage';
 
 function ProtectedLayout() {
   const { data: session, isPending, error } = useSession();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isHome = location.pathname === '/';
+
   // Offline Auth: Fallback to cached session
   const [cachedSession, setCachedSession] = useState<Session | null>(() => {
     if (typeof localStorage !== 'undefined') {
@@ -32,6 +37,7 @@ function ProtectedLayout() {
   useEffect(() => {
     // Initial sync on load if online
     syncQueue();
+    pullFromServer();
   }, []);
 
   // Use cached session if real session fails (offline) or is pending but we have cache
@@ -52,23 +58,37 @@ function ProtectedLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center select-none">
-      <header className="absolute top-4 right-4 z-10">
-        <div className="relative group">
-          <button className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
-            {user.image ? (
-              <img src={user.image} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-gray-300" />
-            )}
-          </button>
-          <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-100 hidden group-hover:block px-1 py-1">
-            <button onClick={() => signOut()} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center gap-2">
-              <LogOut className="w-3 h-3" /> Logout
+      {isHome && (
+        <>
+          <header className="absolute top-4 right-4 z-10 animate-fade-in">
+            <div className="relative group">
+              <button className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                {user.image ? (
+                  <img src={user.image} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-gray-300" />
+                )}
+              </button>
+              <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-100 hidden group-hover:block px-1 py-1">
+                <button onClick={() => signOut()} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center gap-2">
+                  <LogOut className="w-3 h-3" /> Logout
+                </button>
+              </div>
+            </div>
+          </header>
+          <div className="absolute top-4 left-4 z-10 animate-fade-in">
+            <button
+              onClick={() => navigate('/timeline')}
+              className="p-2 -ml-2 text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-1"
+              title="Timeline"
+            >
+              <Clock className="w-5 h-5" />
+              {/* Optional label if we want explicit, but icon is subtle/nice */}
             </button>
           </div>
-        </div>
-      </header>
-      <main className="w-full max-w-lg h-screen flex flex-col relative px-4 md:px-0">
+        </>
+      )}
+      <main className="w-full max-w-lg flex-1 flex flex-col relative px-4 md:px-0">
         <Outlet />
       </main>
     </div>
@@ -133,7 +153,7 @@ function DinApp() {
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between py-6 h-full">
+    <div className="flex-1 flex flex-col justify-between py-6 min-h-[80vh]">
       {/* Input Surface */}
       <div className="flex-1 flex flex-col pt-12">
         {layoutState === 'CAPTURED' ? (
@@ -208,6 +228,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<DinApp />} />
+              <Route path="/timeline" element={<TimelinePage />} />
             </Route>
           </Routes>
         </BrowserRouter>

@@ -34,6 +34,15 @@ export const appRouter = t.router({
         getToday: t.procedure
             .query(async ({ ctx }) => {
                 return await ctx.userTimeline.getToday();
+            }),
+
+        // Sync: Pull recent history
+        getRecent: t.procedure
+            .input(z.object({
+                limit: z.number().min(1).max(100).default(50).optional()
+            }).optional())
+            .query(async ({ input, ctx }) => {
+                return await ctx.userTimeline.getRecent(input?.limit);
             })
     })
 });

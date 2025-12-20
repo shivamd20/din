@@ -99,6 +99,16 @@ export class UserTimelineDO extends DurableObject<Env> {
 
     // ... (Keep existing getToday and other methods if needed for other parts, simplified below)
 
+    async getRecent(limit: number = 50): Promise<{ entry_id: string, created_at: number, raw_text: string, attachments_json: string }[]> {
+        // Fetch most recent entries for syncing/timeline population
+        return this.sql
+            .exec(
+                "SELECT * FROM entries ORDER BY created_at DESC LIMIT ?",
+                limit
+            )
+            .toArray() as { entry_id: string, created_at: number, raw_text: string, attachments_json: string }[];
+    }
+
     async getToday() {
         const todayStr = new Date().toISOString().split("T")[0];
         const summaryResults = this.sql

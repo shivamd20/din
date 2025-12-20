@@ -63,5 +63,9 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
-  }
+  },
+  build: {
+    outDir: 'public',
+    sourcemap: true,
+  },
 });

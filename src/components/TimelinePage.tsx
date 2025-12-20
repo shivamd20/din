@@ -1,14 +1,13 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { ExpandableMarkdown } from "./ExpandableMarkdown";
 
 export default function TimelinePage() {
     const navigate = useNavigate();
 
     // 7. Infinite Scroll (Phase 1: Simple paging/all load for now as per spec "Load entries from IndexedDB")
-    // Spec says: "Load entries from IndexedDB in pages... For Phase 1: Simple paging is enough"
-    // We'll start with a generous limit to keep it simple and performant enough for initial usage.
     const entries = useLiveQuery(() =>
         db.entries.orderBy('created_at').reverse().limit(50).toArray()
     );
@@ -39,9 +38,6 @@ export default function TimelinePage() {
                     const date = new Date(entry.created_at);
 
                     // A. Timestamp Logic (Phase 1 Simple)
-                    // "Just now", "Today, 8:42 PM", etc. can be complex.
-                    // Using basic consistent formatting for reliability first.
-                    // We can use a helper if we want strict relative time.
                     const dateStr = date.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
                     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                     const timestamp = `${dateStr}, ${timeStr}`;
@@ -54,9 +50,7 @@ export default function TimelinePage() {
                             </div>
 
                             {/* B. Entry Text */}
-                            <div className="text-[17px] leading-relaxed text-zinc-800 whitespace-pre-wrap">
-                                {entry.text}
-                            </div>
+                            <ExpandableMarkdown content={entry.text} />
 
                             {/* C. Attachments */}
                             {entry.attachments && entry.attachments.length > 0 && (

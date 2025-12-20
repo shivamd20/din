@@ -1,4 +1,5 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import React, { useState, useEffect, type FormEvent } from 'react';
+import MDEditor from '@uiw/react-md-editor';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import LoginPage from './components/LoginPage';
 import { useSession, signOut, type Session } from './lib/auth-client';
@@ -203,18 +204,47 @@ function DinApp() {
           </div>
         ) : (
           <>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              className="w-full h-[50vh] bg-transparent resize-none outline-none text-2xl md:text-3xl text-zinc-800 placeholder:text-zinc-300 leading-relaxed p-2"
-              placeholder={placeholder}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  handleSubmit();
+            <div className="w-full" data-color-mode="light">
+              <style>{`
+                /* Functional requirement: Hide toolbar on mobile */
+                @media (max-width: 768px) {
+                  .w-md-editor-toolbar {
+                    display: none;
+                  }
                 }
-              }}
-            />
+                /* Fix broken text selection (white on white) */
+                .w-md-editor ::selection,
+                .w-md-editor-text ::selection,
+                .w-md-editor-text-input ::selection,
+                .w-md-editor-text-pre ::selection {
+                  background-color: #bfdbfe !important; /* blue-200 */
+                  color: #1f2937 !important; /* gray-800 */
+                  -webkit-text-fill-color: #1f2937 !important;
+                }
+              `}</style>
+              <MDEditor
+                value={text}
+                onChange={(val?: string) => setText(val || '')}
+                preview="edit"
+                visibleDragbar={false}
+                height="50vh"
+                style={{
+                  backgroundColor: 'transparent',
+                  fontSize: '18px', // Increased a bit from default
+                  boxShadow: 'none',
+                }}
+                className="w-full"
+                textareaProps={{
+                  placeholder: placeholder,
+                  autoFocus: true,
+                  onKeyDown: (e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      handleSubmit();
+                    }
+                  }
+                }}
+              />
+            </div>
 
             {/* Attachments Preview */}
             {attachments.length > 0 && (

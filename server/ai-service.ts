@@ -14,34 +14,27 @@ export class AIService {
 
         const systemPrompt = `You are a minimalist personal log assistant. Your goal is to help the user capture MISSING objective context (time, place, people, food details) for their log entry.
 
-        Strict Suppression Rules (Do NOT ask *Follow-Up Questions* if):
-        - The entry effectively describes "what happened" already.
-        - The entry is emotional, venting, or introspective.
-        - The entry has > 2 factual clauses (e.g. "I ate pizza with John at home" -> has what, who, where -> SUPPRESS questions).
-        - The user seems tired or rushed (short, vague words).
-
-        Analysis/Reward (ALWAYS provide if positive/neutral):
+        Analysis/Reward (ALWAYS provide):
         - Look for a small achievement, positive habit, specific number improvement, or interesting detail.
         - "That's great, 2 more reps than last week!" or "Pizza sounds delicious." or "Consistency is key."
         - Keep it brief (1 short sentence). Be encouraging but not cheesy.
         
-        If you decide to ask Follow-Up Questions:
+        Follow-Up Questions (Always provide at least 1):
+        - Prioritize specific questions about missing context (Who? Where? When?).
+        - If the entry seems complete or emotional, ask a gentle open-ended question (e.g. "How did you feel?", "Any other details?", "What's next?").
         - Provide 1-4 short, neutral suggestion chips.
-        - Chips must be fragments (e.g. "Who with?", "Where?", "What time?").
-        - NEVER be conversational in the chips.
+        - Chips must be fragments (e.g. "Who with?", "Where?").
         
         Return JSON format:
         {
-            "suppressed": boolean, // true if NO follow-up questions should be asked.
-            "reason": string,
             "analysis": string, // Short positive/neutral comment.
-            "chips": string[]
+            "chips": string[] // Must contain at least one string.
         }`;
 
         const userPrompt = `Prior Context: ${recentContext.join("; ")}\n\nCurrent Entry: "${entryText}"\n\nAnalyze and generate JSON:`;
 
         try {
-            const response: any = await this.ai.run('@cf/meta/llama-3-3-70b-instruct' as any, {
+            const response: any = await this.ai.run('@cf/meta/llama-3.1-70b-instruct' as any, {
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt }
@@ -62,18 +55,11 @@ export class AIService {
 
             const parsed = JSON.parse(content);
 
-            // If suppressed, we might still want the analysis if available?
-            // The caller handles logic. We just return what we got.
-            // If suppressed, chips are empty.
+            let rawChips: string[] = parsed.chips?.slice(0, 4) || [];
 
-            const rawChips: string[] = parsed.chips?.slice(0, 4) || [];
-            if (parsed.suppressed) {
-                // If suppressed, return empty chips but include analysis if present
-                return {
-                    chips: [],
-                    analysis: parsed.analysis || undefined,
-                    suppressionReason: parsed.reason
-                };
+            // Fallback: Ensure at least one chip exists
+            if (rawChips.length === 0) {
+                rawChips = ["Anything else?", "How did it feel?"];
             }
 
             const generationId = crypto.randomUUID();

@@ -1,34 +1,67 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
-import path from 'node:path'
-
+// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      manifest: {
+        name: 'Din',
+        short_name: 'Din',
+        description: 'A place to put things down.',
+        theme_color: '#ffffff',
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // <== 365 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          }
+        ]
+      }
+    })
+  ],
   resolve: {
     alias: {
-      '@': path.resolve(process.cwd(), 'src'),
+      '@': '/src',
     },
   },
   server: {
     port: 5174,
     proxy: {
-      '/api/': {
-        target: 'http://127.0.0.1:8787',
+      '/api': {
+        target: 'http://localhost:8787',
         changeOrigin: true,
-        ws: true,
-      },
-      '/ws/note': {
-        target: 'http://127.0.0.1:8787',
-        changeOrigin: false,
-        ws: true,
-        rewriteWsOrigin: false,
-      },
-    },
-  },
-  build: {
-    outDir: 'public',
-    sourcemap: true,
-  },
-})
+      }
+    }
+  }
+});

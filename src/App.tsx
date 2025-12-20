@@ -1,47 +1,74 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import LoginPage from './components/LoginPage';
-import { useSession, signOut } from './lib/auth-client';
-import { LogOut } from 'lucide-react';
+import { useSession, signOut, type Session } from './lib/auth-client';
+import { LogOut, Image, Paperclip } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from './lib/db';
+import { syncQueue } from './lib/sync';
+import { v4 as uuidv4 } from 'uuid';
 
-interface Entry {
-  created_at: string;
-  raw_text: string;
-}
-
-interface Summary {
-  summary_text: string;
-}
-
-interface TodayData {
-  entries: Entry[];
-  summary?: Summary;
-}
+import { trpcClient, queryClient, trpc } from './lib/trpc';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ContextSuggestions } from './components/ContextSuggestions';
 
 function ProtectedLayout() {
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending, error } = useSession();
+  // Offline Auth: Fallback to cached session
+  const [cachedSession, setCachedSession] = useState<Session | null>(() => {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('din-session');
+      return stored ? JSON.parse(stored) : null;
+    }
+    return null;
+  });
 
-  if (isPending) {
+  useEffect(() => {
+    if (session) {
+      localStorage.setItem('din-session', JSON.stringify(session));
+    }
+  }, [session]);
+
+  useEffect(() => {
+    // Initial sync on load if online
+    syncQueue();
+  }, []);
+
+  // Use cached session if real session fails (offline) or is pending but we have cache
+  const effectiveSession = session || (error ? cachedSession : null) || (isPending ? cachedSession : null);
+
+  if (isPending && !cachedSession) {
     return <div className="flex h-screen w-screen items-center justify-center bg-gray-50 text-gray-500">Loading...</div>;
   }
 
-  if (!session?.user) {
-    return <Navigate to="/login" replace />;
+  if (!effectiveSession?.user) {
+    // Only redirect if we definitely have no session and no cache
+    if (!isPending) return <Navigate to="/login" replace />;
+    // If pending and no cache, wait (loading state above covers this)
+    return null;
   }
 
+  const user = effectiveSession.user;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center">
-      <header className="w-full max-w-lg mt-8 mb-4 flex justify-between items-center px-4 md:px-0">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-800">din</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-zinc-600 hidden sm:block">{session.user.name}</span>
-          {session.user.image && <img src={session.user.image} alt="Profile" className="w-8 h-8 rounded-full border border-zinc-200" />}
-          <button onClick={() => signOut()} className="p-2 text-zinc-400 hover:text-red-500 transition-colors" title="Sign out">
-            <LogOut className="w-4 h-4" />
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center select-none">
+      <header className="absolute top-4 right-4 z-10">
+        <div className="relative group">
+          <button className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+            {user.image ? (
+              <img src={user.image} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gray-300" />
+            )}
           </button>
+          <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-100 hidden group-hover:block px-1 py-1">
+            <button onClick={() => signOut()} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center gap-2">
+              <LogOut className="w-3 h-3" /> Logout
+            </button>
+          </div>
         </div>
       </header>
-      <main className="w-full max-w-lg p-4 md:p-0">
+      <main className="w-full max-w-lg h-screen flex flex-col relative px-4 md:px-0">
         <Outlet />
       </main>
     </div>
@@ -49,141 +76,142 @@ function ProtectedLayout() {
 }
 
 function DinApp() {
-  const [text, setText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [status, setStatus] = useState<'offline' | 'online' | 'error'>('offline');
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [summary, setSummary] = useState<string | null>(null);
-
-  const loadToday = async () => {
-    try {
-      const response = await fetch('/api/today');
-      if (response.status === 401) {
-        // handled by protected layout usually, but good to be safe
-        return;
-      }
-      if (!response.ok) throw new Error('Failed to load');
-
-      const data = await response.json() as TodayData;
-
-      if (data.summary) {
-        setSummary(data.summary.summary_text);
-      } else {
-        setSummary(null);
-      }
-
-      setEntries(data.entries || []);
-      setStatus('online');
-    } catch (error) {
-      console.error(error);
-      setStatus('error');
+  // Drafts: Load from localStorage
+  const [text, setText] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('din-draft') || '';
     }
-  };
+    return '';
+  });
 
+  // Drafts: Autosave
   useEffect(() => {
-    loadToday();
-  }, []);
+    localStorage.setItem('din-draft', text);
+  }, [text]);
+
+  const [layoutState, setLayoutState] = useState<'IDLE' | 'CAPTURED' | 'DONE'>('IDLE');
+  const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
+
+  // Rotate placeholders
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [placeholder, setPlaceholder] = useState("What happened?");
+
+  // Local entries for debugging/verification only (not essential for the input-only UI)
+  // const entries = useLiveQuery(() => db.entries.reverse().sortBy('created_at'));
 
   const handleSubmit = async (e?: FormEvent) => {
     e?.preventDefault();
     if (!text.trim()) return;
 
-    setIsLoading(true);
+    const entryId = uuidv4();
+    const now = Date.now();
+
     try {
-      const response = await fetch('/api/log', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ text: text.trim() })
+      // 1. Local Write
+      await db.entries.add({
+        id: entryId,
+        created_at: now,
+        text: text.trim(),
+        synced: 0
       });
 
-      if (!response.ok) throw new Error('Failed to log');
-
-      const result = await response.json();
-      console.log("Logged:", result);
-
+      // 2. Clear UI & Draft immediately
       setText('');
-      await loadToday();
+      localStorage.removeItem('din-draft');
+      setCurrentEntryId(entryId);
+      setLayoutState('CAPTURED');
+
+      // 3. Trigger Sync (fire and forget)
+      syncQueue();
+
+      // 4. Do NOT auto-reset. Wait for Context completion or explicit dismissal.
+
     } catch (error) {
-      console.error(error);
-      alert('Failed to log entry');
-    } finally {
-      setIsLoading(false);
+      console.error("Capture failed locally", error);
+      alert("Something went wrong saving to your device.");
     }
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <section>
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-zinc-200 focus-within:ring-2 focus-within:ring-zinc-200 transition-all">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="w-full bg-transparent resize-none outline-none text-base text-zinc-800 placeholder:text-zinc-400 min-h-[100px]"
-            placeholder="What's on your mind?"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                handleSubmit();
-              }
-            }}
-          />
-          <div className="flex justify-between items-center mt-3 pt-2 border-t border-zinc-50">
-            <span className="text-xs text-zinc-400 font-medium">{text.length} chars</span>
-            <button
-              onClick={() => handleSubmit()}
-              disabled={isLoading || !text.trim()}
-              className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-sm font-medium transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Saving...' : 'Log Entry'}
-            </button>
+    <div className="flex-1 flex flex-col justify-between py-6 h-full">
+      {/* Input Surface */}
+      <div className="flex-1 flex flex-col pt-12">
+        {layoutState === 'CAPTURED' ? (
+          <div className="flex-1 flex flex-col items-center justify-center animate-fade-in w-full max-w-md mx-auto">
+            <p className="text-xl text-zinc-800 font-medium mb-2">Captured.</p>
+            {currentEntryId && (
+              <ContextSuggestions
+                entryId={currentEntryId}
+                onComplete={() => {
+                  // Show "Got it" then reset
+                  setLayoutState('DONE');
+                  setTimeout(() => {
+                    setLayoutState('IDLE');
+                    setCurrentEntryId(null);
+                  }, 1500);
+                }}
+              />
+            )}
           </div>
-        </div>
-      </section>
-
-      {summary && (
-        <section className="animate-fade-in">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">AI Summary</h2>
-          <div className="p-5 rounded-2xl bg-white border border-zinc-100 shadow-sm text-zinc-700 leading-relaxed italic">
-            "{summary}"
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-4">
-        {entries.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-zinc-400 text-sm">No entries yet today.</p>
+        ) : layoutState === 'DONE' ? (
+          <div className="flex-1 flex flex-col items-center justify-center animate-fade-in">
+            <p className="text-xl text-zinc-500 font-medium">Got it.</p>
           </div>
         ) : (
-          entries.slice().reverse().map((entry, index) => {
-            const time = new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            return (
-              <div key={index} className="group p-4 rounded-xl bg-white border border-zinc-100 hover:border-zinc-200 shadow-sm transition-all hover:shadow-md animate-fade-in">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-medium text-zinc-400 bg-zinc-50 px-2 py-1 rounded-md">{time}</span>
-                </div>
-                <div className="text-zinc-800 whitespace-pre-wrap leading-relaxed">{entry.raw_text}</div>
-              </div>
-            );
-          })
+          <>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full h-[60vh] bg-transparent resize-none outline-none text-2xl md:text-3xl text-zinc-800 placeholder:text-zinc-300 leading-relaxed p-2"
+              placeholder={placeholder}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  handleSubmit();
+                }
+              }}
+            />
+
+            {/* Attachment Row */}
+            <div className="flex items-center gap-4 px-2 mt-4">
+              <button className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
+                <Image className="w-5 h-5" />
+              </button>
+              <button className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
+                <Paperclip className="w-5 h-5" />
+              </button>
+            </div>
+          </>
         )}
-      </section>
+      </div>
+
+      {/* Primary Action */}
+      <div className="pb-6">
+        <button
+          onClick={() => handleSubmit()}
+          disabled={layoutState === 'CAPTURED' || !text.trim()}
+          className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white rounded-2xl text-lg font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {layoutState === 'CAPTURED' ? 'Saved' : 'Capture'}
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedLayout />}>
-          <Route path="/" element={<DinApp />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<ProtectedLayout />}>
+              <Route path="/" element={<DinApp />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </trpc.Provider>
+    </QueryClientProvider>
   );
 }

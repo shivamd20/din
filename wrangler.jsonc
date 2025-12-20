@@ -41,7 +41,7 @@
 			"binding": "liva_db",
 			"database_name": "liva-db",
 			"database_id": "afc565c7-a861-4c2a-9686-40a905c483a4",
-			"remote": true
+			"remote": false
 		}
 	],
 	"observability": {

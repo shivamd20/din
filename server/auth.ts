@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { anonymous } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./db/schema";
@@ -12,6 +13,9 @@ export const createAuth = (env: Env) => {
                 ...schema
             }
         }),
+        plugins: [
+            anonymous()
+        ],
         secret: env.BETTER_AUTH_SECRET,
         socialProviders: {
             google: {

@@ -60,6 +60,18 @@ function ProtectedLayout() {
 
   return (
     <div className="min-h-full min-w-screen bg-gray-50 flex flex-col items-center select-none">
+      {/* @ts-ignore - isAnonymous is added by plugin */}
+      {user.isAnonymous && (
+        <div className="w-full bg-amber-50 px-4 py-3 text-sm text-amber-800 text-center border-b border-amber-100 flex items-center justify-center gap-2 relative z-50">
+          <span>You are using a temporary guest account.</span>
+          <button
+            onClick={() => navigate('/login')}
+            className="underline font-medium hover:text-amber-900"
+          >
+            Sign in to save data
+          </button>
+        </div>
+      )}
       {isHome && (
         <>
           <header className="  absolute top-4 right-4 z-10 animate-fade-in">

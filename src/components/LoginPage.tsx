@@ -13,7 +13,8 @@ export default function LoginPage() {
         });
     };
 
-    if (session?.user) {
+    // @ts-ignore
+    if (session?.user && !session.user.isAnonymous) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
                 <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 text-center">
@@ -79,6 +80,28 @@ export default function LoginPage() {
                         </svg>
                         Continue with Google
                     </button>
+
+                    {/* @ts-ignore */}
+                    {(!session?.user?.isAnonymous) && (
+                        <>
+                            <div className="relative flex py-2 items-center">
+                                <div className="flex-grow border-t border-gray-200"></div>
+                                <span className="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase">Or</span>
+                                <div className="flex-grow border-t border-gray-200"></div>
+                            </div>
+
+                            <button
+                                onClick={async () => {
+                                    await signIn.anonymous();
+                                    navigate('/');
+                                }}
+                                className="w-full py-3 px-4 bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-600 font-medium rounded-xl transition-all flex items-center justify-center gap-3"
+                            >
+                                <User className="w-5 h-5" />
+                                Continue as Guest
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

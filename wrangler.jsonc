@@ -44,6 +44,12 @@
 			"remote": true
 		}
 	],
+	"r2_buckets": [
+		{
+			"binding": "files",
+			"bucket_name": "din-files"
+		}
+	],
 	"observability": {
 		"enabled": true
 	},

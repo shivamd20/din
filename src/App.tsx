@@ -4,9 +4,10 @@ import LoginPage from './components/LoginPage';
 import { useSession, signOut, type Session } from './lib/auth-client';
 import { LogOut, Image, Paperclip, Clock } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from './lib/db';
+import { db, type Attachment } from './lib/db';
 import { syncQueue, pullFromServer } from './lib/sync';
 import { v4 as uuidv4 } from 'uuid';
+import { useRef, type ChangeEvent } from 'react';
 
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -116,12 +117,33 @@ function DinApp() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [placeholder, setPlaceholder] = useState("What happened?");
 
+  // Attachments
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>, fileType: 'image' | 'file') => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newAtts: Attachment[] = Array.from(e.target.files).map(f => ({
+        id: uuidv4(),
+        type: f.type.startsWith('image/') ? 'image' : 'file', // refined type
+        mimeType: f.type,
+        name: f.name,
+        blob: f,
+        synced: 0
+      }));
+      setAttachments(prev => [...prev, ...newAtts]);
+      // Reset input so same file can be selected again if needed
+      if (e.target) e.target.value = '';
+    }
+  };
+
   // Local entries for debugging/verification only (not essential for the input-only UI)
   // const entries = useLiveQuery(() => db.entries.reverse().sortBy('created_at'));
 
   const handleSubmit = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (!text.trim()) return;
+    if (!text.trim() && attachments.length === 0) return;
 
     const entryId = uuidv4();
     const now = Date.now();
@@ -132,11 +154,13 @@ function DinApp() {
         id: entryId,
         created_at: now,
         text: text.trim(),
+        attachments: attachments,
         synced: 0
       });
 
       // 2. Clear UI & Draft immediately
       setText('');
+      setAttachments([]);
       localStorage.removeItem('din-draft');
       setCurrentEntryId(entryId);
       setLayoutState('CAPTURED');
@@ -182,7 +206,7 @@ function DinApp() {
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full h-[60vh] bg-transparent resize-none outline-none text-2xl md:text-3xl text-zinc-800 placeholder:text-zinc-300 leading-relaxed p-2"
+              className="w-full h-[50vh] bg-transparent resize-none outline-none text-2xl md:text-3xl text-zinc-800 placeholder:text-zinc-300 leading-relaxed p-2"
               placeholder={placeholder}
               autoFocus
               onKeyDown={(e) => {
@@ -192,12 +216,36 @@ function DinApp() {
               }}
             />
 
+            {/* Attachments Preview */}
+            {attachments.length > 0 && (
+              <div className="flex gap-3 overflow-x-auto p-2 pb-4">
+                {attachments.map((att) => (
+                  <div key={att.id} className="relative group shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-zinc-200 bg-gray-50 flex items-center justify-center">
+                    {att.type === 'image' && att.blob ? (
+                      <img src={URL.createObjectURL(att.blob)} alt="preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-xs text-center p-1 text-zinc-500 break-all">{att.name || att.type}</div>
+                    )}
+                    <button
+                      onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Attachment Row */}
             <div className="flex items-center gap-4 px-2 mt-4">
-              <button className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
+              <input type="file" ref={imageInputRef} accept="image/*" className="hidden" multiple onChange={(e) => handleFileSelect(e, 'image')} />
+              <input type="file" ref={fileInputRef} className="hidden" multiple onChange={(e) => handleFileSelect(e, 'file')} />
+
+              <button onClick={() => imageInputRef.current?.click()} className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
                 <Image className="w-5 h-5" />
               </button>
-              <button className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
+              <button onClick={() => fileInputRef.current?.click()} className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
                 <Paperclip className="w-5 h-5" />
               </button>
             </div>
@@ -209,7 +257,7 @@ function DinApp() {
       <div className="pb-6">
         <button
           onClick={() => handleSubmit()}
-          disabled={layoutState === 'CAPTURED' || !text.trim()}
+          disabled={layoutState === 'CAPTURED' || (!text.trim() && attachments.length === 0)}
           className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white rounded-2xl text-lg font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {layoutState === 'CAPTURED' ? 'Saved' : 'Capture'}

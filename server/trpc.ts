@@ -15,7 +15,13 @@ export const appRouter = t.router({
             .input(z.object({
                 entryId: z.string().uuid(),
                 text: z.string(),
-                attachments: z.array(z.string()).optional()
+                attachments: z.array(z.object({
+                    id: z.string(),
+                    key: z.string(),
+                    type: z.string(),
+                    mimeType: z.string(),
+                    name: z.string().optional()
+                })).optional()
             }))
             .mutation(async ({ input, ctx }) => {
                 return await ctx.userTimeline.log(input);

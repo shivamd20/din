@@ -46,7 +46,7 @@ export class UserTimelineDO extends DurableObject<Env> {
         }
     }
 
-    async log(data: { entryId: string, text: string, attachments?: string[] }) {
+    async log(data: { entryId: string, text: string, attachments?: any[] }) {
         const { entryId, text, attachments = [] } = data;
         const now = Date.now();
 

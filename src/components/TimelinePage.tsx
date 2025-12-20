@@ -58,7 +58,46 @@ export default function TimelinePage() {
                                 {entry.text}
                             </div>
 
-                            {/* C. Attachments (Placeholder logic for now as per schema default '[]') */}
+                            {/* C. Attachments */}
+                            {entry.attachments && entry.attachments.length > 0 && (
+                                <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                                    {entry.attachments.map(att => {
+                                        let src = '';
+                                        if (att.blob) {
+                                            src = URL.createObjectURL(att.blob);
+                                        } else if (att.key) {
+                                            src = `/api/files/${att.key}`;
+                                        }
+
+                                        if (att.type === 'image') {
+                                            return (
+                                                <div key={att.id} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 border border-zinc-200">
+                                                    {src ? (
+                                                        <img src={src} alt="attachment" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-zinc-300">Loading...</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        } else {
+                                            return (
+                                                <a
+                                                    key={att.id}
+                                                    href={src || '#'}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="aspect-square rounded-lg bg-gray-50 border border-zinc-200 flex flex-col items-center justify-center p-2 text-center hover:bg-gray-100 transition-colors text-zinc-600 gap-1"
+                                                >
+                                                    <div className="p-2 bg-white rounded-full shadow-sm">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                                    </div>
+                                                    <span className="text-[10px] break-all line-clamp-2">{att.name || 'File'}</span>
+                                                </a>
+                                            );
+                                        }
+                                    })}
+                                </div>
+                            )}
 
                             {/* D. Sync Status Indicator */}
                             {entry.synced === 0 && (

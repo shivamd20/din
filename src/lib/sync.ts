@@ -18,10 +18,61 @@ export async function syncQueue() {
         // Process serially to maintain order if that matters (FIFO)
         for (const entry of unsynced) {
             try {
+                const attachments = entry.attachments || [];
+                let hasPendingUploads = false;
+
+                // 1. Upload Attachments
+                const updatedAttachments = await Promise.all(attachments.map(async (att) => {
+                    // Already uploaded
+                    if (att.key) return att;
+
+                    // Missing partial data
+                    if (!att.blob) {
+                        console.warn("Attachment content missing locally", att.id);
+                        return att;
+                    }
+
+                    try {
+                        const res = await fetch(`/api/upload?key=${att.id}&type=${encodeURIComponent(att.mimeType)}`, {
+                            method: 'POST',
+                            body: att.blob
+                        });
+
+                        if (!res.ok) throw new Error("Upload failed");
+
+                        // Success: Update state
+                        // We choose to remove blob to save space, assuming SW caches the URL if accessed,
+                        // or we rely on online fetch. 
+                        // "Keep stored ... until uploaded" implies cleanup.
+                        return { ...att, key: att.id, blob: undefined };
+                    } catch (e) {
+                        console.error("Upload error for attachment", att.id, e);
+                        hasPendingUploads = true;
+                        return att;
+                    }
+                }));
+
+                // Save progress (keys) locally even if others fail
+                if (JSON.stringify(updatedAttachments) !== JSON.stringify(attachments)) {
+                    await db.entries.update(entry.id, { attachments: updatedAttachments });
+                }
+
+                if (hasPendingUploads) {
+                    console.log("Entry has pending uploads, skipping items sync", entry.id);
+                    continue;
+                }
+
+                // 2. Sync Entry to Server
                 await trpcClient.log.create.mutate({
                     entryId: entry.id,
                     text: entry.text,
-                    // Attachments not handled in DB yet, defaulted in schema/mutation
+                    attachments: updatedAttachments.map(a => ({
+                        id: a.id,
+                        key: a.key!,
+                        type: a.type,
+                        mimeType: a.mimeType,
+                        name: a.name
+                    }))
                 });
 
                 // Mark as synced
@@ -46,12 +97,6 @@ export async function pullFromServer() {
         // Fetch from tRPC
         const serverEntries = await trpcClient.log.getRecent.query({ limit: 100 });
 
-        // Upsert into Dexie
-        // We use bulkPut to efficiently write many items. 
-        // Important: We only overwrite if the server version is "newer" or authoritative.
-        // For simplicity in Phase 1: Server is authoritative for history.
-        // However, we MUST NOT overwrite local unsynced changes (synced=0).
-
         await db.transaction('rw', db.entries, async () => {
             for (const sEntry of serverEntries) {
                 // Check if we have a local version
@@ -62,11 +107,20 @@ export async function pullFromServer() {
                     continue;
                 }
 
+                // Parse attachments
+                let attachments = [];
+                try {
+                    attachments = JSON.parse(sEntry.attachments_json || '[]');
+                } catch (e) {
+                    console.error("Failed to parse attachments", e);
+                }
+
                 // Otherwise, upsert (New entry OR Overwrite synced entry)
                 await db.entries.put({
                     id: sEntry.entry_id as string,
                     created_at: sEntry.created_at as number,
                     text: sEntry.raw_text as string,
+                    attachments: attachments, // Remote attachments will have keys, no blobs
                     synced: 1 // It came from server, so it is synced
                 });
             }

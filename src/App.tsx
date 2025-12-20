@@ -1,9 +1,8 @@
 import React, { useState, useEffect, type FormEvent } from 'react';
 import MDEditor from '@uiw/react-md-editor';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import LoginPage from './components/LoginPage';
-import { useSession, signOut, type Session } from './lib/auth-client';
-import { LogOut, Image, Paperclip, Clock } from 'lucide-react';
+import { BrowserRouter, Routes, Route, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useSession, signOut, signIn, type Session } from './lib/auth-client';
+import { LogOut, Image, Paperclip, Clock, UserCircle, RefreshCcw } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Attachment } from './lib/db';
 import { syncQueue, pullFromServer } from './lib/sync';
@@ -14,6 +13,14 @@ import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ContextSuggestions } from './components/ContextSuggestions';
 import TimelinePage from './components/TimelinePage';
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 function ProtectedLayout() {
   const { data: session, isPending, error } = useSession();
@@ -45,66 +52,123 @@ function ProtectedLayout() {
   // Use cached session if real session fails (offline) or is pending but we have cache
   const effectiveSession = session || (error ? cachedSession : null) || (isPending ? cachedSession : null);
 
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  // Implicit Anonymous Login
+  useEffect(() => {
+    if (!isPending && !effectiveSession?.user && !isSigningIn) {
+      setIsSigningIn(true); // Prevent double-firing
+      signIn.anonymous()
+        .then((res) => {
+          // Optional: force re-fetch if better-auth doesn't auto-update
+          // session.update() 
+        })
+        .catch((e) => {
+          console.error("Anonymous login failed", e);
+        })
+        .finally(() => {
+          setIsSigningIn(false);
+        });
+    }
+  }, [isPending, effectiveSession?.user, isSigningIn]);
+
   if (isPending && !cachedSession) {
     return <div className="flex h-screen w-screen items-center justify-center bg-gray-50 text-gray-500">Loading...</div>;
   }
 
+  // If we are still waiting for implicit login to complete
   if (!effectiveSession?.user) {
-    // Only redirect if we definitely have no session and no cache
-    if (!isPending) return <Navigate to="/login" replace />;
-    // If pending and no cache, wait (loading state above covers this)
-    return null;
+    return <div className="flex h-screen w-screen items-center justify-center bg-gray-50 text-gray-500">Initializing...</div>;
   }
+
+  const handleLogout = async () => {
+    try {
+      await db.delete();
+    } catch (e) {
+      console.error("Failed to delete DB", e);
+    }
+    localStorage.clear();
+    await signOut();
+    window.location.reload();
+  };
 
   const user = effectiveSession.user;
 
   return (
-    <div className="min-h-full min-w-screen bg-gray-50 flex flex-col items-center select-none">
-      {/* @ts-ignore - isAnonymous is added by plugin */}
-      {user.isAnonymous && (
-        <div className="w-full bg-amber-50 px-4 py-3 text-sm text-amber-800 text-center border-b border-amber-100 flex items-center justify-center gap-2 relative z-50">
-          <span>You are using a temporary guest account.</span>
-          <button
-            onClick={() => navigate('/login')}
-            className="underline font-medium hover:text-amber-900"
-          >
-            Sign in to save data
-          </button>
-        </div>
-      )}
+    <div className="h-[100dvh] w-full bg-[#f9fafb] flex flex-col overflow-hidden relative touch-none">
       {isHome && (
-        <>
-          <header className="  absolute top-4 right-4 z-10 animate-fade-in">
-            <div className="relative group">
-              <button className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
-                {user.image ? (
-                  <img src={user.image} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-gray-300" />
-                )}
-              </button>
-              <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-100 hidden group-hover:block px-1 py-1">
-                <button onClick={() => signOut()} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center gap-2">
-                  <LogOut className="w-3 h-3" /> Logout
-                </button>
-              </div>
-            </div>
-          </header>
-          <div className="absolute top-4 left-4 z-10 animate-fade-in">
+        <header className="flex-none p-4 flex justify-between items-start z-10 bg-transparent pointer-events-none">
+          {/* Left Timeline Button */}
+          <div className="pointer-events-auto">
             <button
               onClick={() => navigate('/timeline')}
-              className="p-2 -ml-2 text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-1"
+              className="p-2 text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-1"
               title="Timeline"
             >
               <Clock className="w-5 h-5" />
-              {/* Optional label if we want explicit, but icon is subtle/nice */}
             </button>
           </div>
-        </>
+
+          {/* Right Profile Button */}
+          <div className="pointer-events-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-400 shadow-sm">
+                  <Avatar className="h-9 w-9 border border-gray-200">
+                    <AvatarImage src={user.image || undefined} alt={user.name} />
+                    <AvatarFallback className="bg-gray-200 text-gray-500">
+                      <UserCircle className="w-5 h-5" />
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onClick={() => signIn.social({
+                    provider: 'google',
+                    callbackURL: '/'
+                  })}
+                  className="cursor-pointer"
+                >
+                  <RefreshCcw className="mr-2 h-4 w-4" />
+                  <span>Switch Account</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Logout</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
       )}
-      <main className="w-full max-w-lg flex-1 flex flex-col relative px-4 md:px-0">
+
+      {/* Main Content Area - Scrollable if internal parts sync, but we want flex-1 layout */}
+      <main className="flex-1 w-full max-w-lg mx-auto flex flex-col relative z-0 overflow-hidden">
         <Outlet />
       </main>
+
+      {/* Guest Banner - Moved to Bottom */}
+      {/* @ts-ignore - isAnonymous is added by plugin */}
+      {user.isAnonymous && (
+        <div className="flex-none w-full bg-amber-50/90 backdrop-blur-sm border-t border-amber-100 pb-[env(safe-area-inset-bottom)]">
+          <div className="px-4 py-2 text-xs md:text-sm text-amber-800 text-center flex items-center justify-center gap-2">
+            <span>Guest Account.</span>
+            <button
+              onClick={() => signIn.social({
+                provider: 'google',
+                callbackURL: '/'
+              })}
+              className="underline font-medium hover:text-amber-900"
+            >
+              Sign in to save data
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -189,10 +253,22 @@ function DinApp() {
     }
   };
 
+  // Scroll into view helper
+  const scrollToActive = () => {
+    // Small delay to allow resize
+    setTimeout(() => {
+      if (document.activeElement?.tagName === 'TEXTAREA') {
+        document.activeElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }, 100);
+  };
+
   return (
-    <div className="flex-1 flex flex-col justify-between py-6 min-h-[80vh]">
-      {/* Input Surface */}
-      <div className="flex-1 flex flex-col pt-12">
+    <div className="h-full flex flex-col relative w-full">
+      {/* Input Surface - Takes all available space */}
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        {/* min-h-0 is crucial for nested flex scrolling */}
+
         {layoutState === 'CAPTURED' ? (
           <div className="flex-1 flex flex-col items-center justify-center animate-fade-in w-full max-w-md mx-auto">
             <p className="text-xl text-zinc-800 font-medium mb-2">Captured.</p>
@@ -216,21 +292,31 @@ function DinApp() {
           </div>
         ) : (
           <>
-            <div className="w-full" data-color-mode="light">
+            <div className="flex-1 w-full flex flex-col" data-color-mode="light">
               <style>{`
-                /* Functional requirement: Hide toolbar on mobile */
+                /* Hide toolbar on mobile */
                 @media (max-width: 768px) {
                   .w-md-editor-toolbar {
                     display: none;
                   }
                 }
-                /* Fix broken text selection (white on white) */
+                .w-md-editor {
+                    background-color: transparent !important;
+                    box-shadow: none !important;
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .w-md-editor-content {
+                    flex: 1;
+                }
+                /* Fix broken text selection */
                 .w-md-editor ::selection,
                 .w-md-editor-text ::selection,
                 .w-md-editor-text-input ::selection,
                 .w-md-editor-text-pre ::selection {
-                  background-color: #bfdbfe !important; /* blue-200 */
-                  color: #1f2937 !important; /* gray-800 */
+                  background-color: #bfdbfe !important; 
+                  color: #1f2937 !important;
                   -webkit-text-fill-color: #1f2937 !important;
                 }
               `}</style>
@@ -239,16 +325,18 @@ function DinApp() {
                 onChange={(val?: string) => setText(val || '')}
                 preview="edit"
                 visibleDragbar={false}
-                height="50vh"
+                height="100%"
                 style={{
                   backgroundColor: 'transparent',
-                  fontSize: '18px', // Increased a bit from default
+                  fontSize: '18px',
                   boxShadow: 'none',
+                  flex: 1, // Ensure it fills
                 }}
-                className="w-full"
+                className="w-full flex-1"
                 textareaProps={{
                   placeholder: placeholder,
                   autoFocus: true,
+                  onFocus: scrollToActive,
                   onKeyDown: (e: React.KeyboardEvent) => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                       handleSubmit();
@@ -258,11 +346,11 @@ function DinApp() {
               />
             </div>
 
-            {/* Attachments Preview */}
+            {/* Attachments Preview - Just above toolbar */}
             {attachments.length > 0 && (
-              <div className="flex gap-3 overflow-x-auto p-2 pb-4">
+              <div className="flex gap-3 overflow-x-auto p-2 pb-0 flex-none bg-[#f9fafb]/90 backdrop-blur-sm z-20">
                 {attachments.map((att) => (
-                  <div key={att.id} className="relative group shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-zinc-200 bg-gray-50 flex items-center justify-center">
+                  <div key={att.id} className="relative group shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-zinc-200 bg-gray-50 flex items-center justify-center">
                     {att.type === 'image' && att.blob ? (
                       <img src={URL.createObjectURL(att.blob)} alt="preview" className="w-full h-full object-cover" />
                     ) : (
@@ -270,7 +358,7 @@ function DinApp() {
                     )}
                     <button
                       onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
-                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 border border-white/20"
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
@@ -278,33 +366,36 @@ function DinApp() {
                 ))}
               </div>
             )}
-
-            {/* Attachment Row */}
-            <div className="flex items-center gap-4 px-2 mt-4">
-              <input type="file" ref={imageInputRef} accept="image/*" className="hidden" multiple onChange={(e) => handleFileSelect(e, 'image')} />
-              <input type="file" ref={fileInputRef} className="hidden" multiple onChange={(e) => handleFileSelect(e, 'file')} />
-
-              <button onClick={() => imageInputRef.current?.click()} className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
-                <Image className="w-5 h-5" />
-              </button>
-              <button onClick={() => fileInputRef.current?.click()} className="p-3 rounded-full bg-zinc-50 text-zinc-400 hover:bg-zinc-100 transition-colors">
-                <Paperclip className="w-5 h-5" />
-              </button>
-            </div>
           </>
         )}
       </div>
 
-      {/* Primary Action */}
-      <div className="pb-6">
-        <button
-          onClick={() => handleSubmit()}
-          disabled={layoutState === 'CAPTURED' || (!text.trim() && attachments.length === 0)}
-          className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] text-white rounded-2xl text-lg font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {layoutState === 'CAPTURED' ? 'Saved' : 'Capture'}
-        </button>
-      </div>
+      {/* Primary Action Bar - Sticky Bottom Area */}
+      {layoutState === 'IDLE' && (
+        <div className="flex-none pb-4 pt-2 px-1 flex items-center gap-3 bg-[#f9fafb] z-30">
+          {/* Tools */}
+          <input type="file" ref={imageInputRef} accept="image/*" className="hidden" multiple onChange={(e) => handleFileSelect(e, 'image')} />
+          <input type="file" ref={fileInputRef} className="hidden" multiple onChange={(e) => handleFileSelect(e, 'file')} />
+
+          <div className="flex gap-1">
+            <button onClick={() => imageInputRef.current?.click()} className="p-3 rounded-2xl bg-white border border-zinc-200 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 transition-colors shadow-sm">
+              <Image className="w-5 h-5" />
+            </button>
+            <button onClick={() => fileInputRef.current?.click()} className="p-3 rounded-2xl bg-white border border-zinc-200 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 transition-colors shadow-sm">
+              <Paperclip className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Capture Button */}
+          <button
+            onClick={() => handleSubmit()}
+            disabled={!text.trim() && attachments.length === 0}
+            className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white rounded-2xl text-lg font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Capture
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -315,7 +406,6 @@ export default function App() {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<DinApp />} />
               <Route path="/timeline" element={<TimelinePage />} />

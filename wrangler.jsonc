@@ -7,6 +7,9 @@
 	"name": "din",
 	"main": "server/index.ts",
 	"compatibility_date": "2025-12-19",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
 	"migrations": [
 		{
 			"new_sqlite_classes": [
@@ -30,6 +33,14 @@
 	"ai": {
 		"binding": "AI"
 	},
+	"d1_databases": [
+		{
+			"binding": "liva_db",
+			"database_name": "liva-db",
+			"database_id": "afc565c7-a861-4c2a-9686-40a905c483a4",
+			"remote": false
+		}
+	],
 	"observability": {
 		"enabled": true
 	},

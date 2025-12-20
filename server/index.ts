@@ -1,18 +1,27 @@
 import { UserTimelineDO } from "./UserTimelineDO";
+import { createAuth } from "./auth";
 
 export { UserTimelineDO };
 
-export interface Env {
-	USER_TIMELINE_DO: DurableObjectNamespace<UserTimelineDO>;
-	AI: any;
-}
+
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
 
 		// Simple Auth Stub
-		const userId = "default-user";
+		// const userId = "default-user";
+		const auth = createAuth(env);
+		if (url.pathname.startsWith("/api/auth")) {
+			return auth.handler(request);
+		}
+
+		const session = await auth.api.getSession({ headers: request.headers });
+		const userId = session?.user?.id;
+
+		if (!userId) {
+			return new Response("Unauthorized", { status: 401 });
+		}
 
 		// Router
 		if (url.pathname === "/api/log" && request.method === "POST") {

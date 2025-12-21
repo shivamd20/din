@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Clock, UserCircle, RefreshCcw, LogOut } from 'lucide-react';
-import { useSession, signOut, signIn } from '@/lib/auth-client';
+import { type Session, signOut, signIn } from '@/lib/auth-client';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,12 +10,14 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { db } from '@/lib/db';
 
-export function Header() {
+interface HeaderProps {
+    user: Session['user'];
+}
+
+export function Header({ user }: HeaderProps) {
     const navigate = useNavigate();
     const location = useLocation();
-    const { data: session } = useSession();
     const isHome = location.pathname === '/';
-    const user = session?.user;
 
     const handleLogout = async () => {
         try {
@@ -28,7 +30,7 @@ export function Header() {
         window.location.reload();
     };
 
-    if (!user) return null;
+
 
     return (
         <header className="flex-none p-4 flex justify-between items-center z-10 bg-transparent min-h-[4rem]">

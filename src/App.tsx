@@ -76,7 +76,7 @@ function ProtectedLayout() {
 
   return (
     <div className="h-[100dvh] w-full bg-[#f9fafb] flex flex-col overflow-hidden relative">
-      <Header />
+      <Header user={user} />
 
       {/* Main Content Area - Scrollable if internal parts sync, but we want flex-1 layout */}
       <main className="flex-1 w-full max-w-lg mx-auto flex flex-col relative z-0 overflow-hidden">

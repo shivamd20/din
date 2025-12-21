@@ -64,7 +64,12 @@ export class AIModel {
      * Streams a chat response with optional tools.
      */
     streamChat(messages: any[], tools?: any, modelId?: string): StreamTextResult<any, any> {
-        const model = this.getModel(modelId || DEFAULT_MODEL_ID);
+        const id = modelId || DEFAULT_MODEL_ID;
+        const model = this.getModel(id);
+        const config = KNOWN_MODELS[id as ModelId];
+
+        // Disable tools for Workers AI temporarily for debugging
+        const safeTools = config?.provider === 'workers-ai' ? undefined : tools;
 
         return streamText({
             model,
@@ -76,7 +81,7 @@ export class AIModel {
     - IF the user asks to log something explicitly, use the 'logToTimeline' tool.
     - IF you need context, use 'getRecentLogs'.`,
             messages,
-            tools,
+            tools: safeTools,
         });
     }
 }

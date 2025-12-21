@@ -4,7 +4,11 @@ import { SendHorizontal, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function ReflectChat() {
-    const { messages, sendMessage, status } = useChat();
+    const { messages, sendMessage, status } = useChat({
+        onError: (e: Error) => console.error('Chat error:', e),
+        onFinish: (m: any) => console.log('Chat finished:', m),
+        onResponse: (r: Response) => console.log('Chat response received', r.status, r.statusText)
+    });
     const [input, setInput] = useState('');
     const isLoading = status === 'submitted' || status === 'streaming';
     const scrollRef = useRef<HTMLDivElement>(null);

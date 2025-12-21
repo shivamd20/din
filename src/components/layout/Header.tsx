@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Clock, UserCircle, RefreshCcw, LogOut } from 'lucide-react';
+import { ArrowLeft, Clock, UserCircle, RefreshCcw, LogOut, Sparkles } from 'lucide-react';
 import { type Session, signOut, signIn } from '@/lib/auth-client';
 import {
     DropdownMenu,
@@ -57,10 +57,18 @@ export function Header({ user }: HeaderProps) {
 
             {/* Center Title */}
             <div className="flex-1 text-center">
-                {!isHome && (
+                {!isHome ? (
                     <h1 className="text-zinc-400 text-sm font-medium tracking-wide uppercase">
                         Timeline
                     </h1>
+                ) : (
+                    <button
+                        onClick={() => navigate('/reflect')}
+                        className="text-zinc-300 hover:text-zinc-600 transition-colors text-sm font-medium tracking-wide flex items-center justify-center gap-2 mx-auto px-3 py-1 rounded-full hover:bg-zinc-50"
+                    >
+                        <Sparkles className="w-4 h-4 opacity-70" />
+                        <span>Reflect</span>
+                    </button>
                 )}
             </div>
 

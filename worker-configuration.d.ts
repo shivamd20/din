@@ -15,6 +15,7 @@ declare namespace Cloudflare {
         liva_db: D1Database;
         files: R2Bucket;
         AI: Ai;
+        GEMINI_API_KEY: string;
     }
 }
 interface Env extends Cloudflare.Env { }

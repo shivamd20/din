@@ -50,6 +50,12 @@ export default {
 			return new Response(JSON.stringify({ key, url: `/api/files/${key}` }), { headers: { "Content-Type": "application/json" } });
 		}
 
+
+		// Chat Handler
+		if (url.pathname === "/api/chat") {
+			return import("./chat").then(m => m.handleChatRequest(request, env));
+		}
+
 		// tRPC Handler
 		if (url.pathname.startsWith("/api/trpc")) {
 			const session = await auth.api.getSession({ headers: request.headers });

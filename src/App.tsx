@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
 import TimelinePage from './components/TimelinePage';
+import ReflectChat from './components/ReflectChat';
 import { Header } from './components/layout/Header';
 import { GuestBanner } from './components/layout/GuestBanner';
 import { getMicrocopy } from './lib/microcopy';
@@ -70,6 +71,15 @@ function ProtectedLayout() {
   }
 
   const user = effectiveSession.user;
+  const isReflect = location.pathname === '/reflect';
+
+  if (isReflect) {
+    return (
+      <div className="h-[100dvh] w-full bg-[#fcfcfc] flex flex-col overflow-hidden relative">
+        <Outlet context={{ user }} />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] w-full bg-[#f9fafb] flex flex-col overflow-hidden relative">
@@ -77,7 +87,7 @@ function ProtectedLayout() {
 
       {/* Main Content Area - Scrollable if internal parts sync, but we want flex-1 layout */}
       <main className="flex-1 w-full max-w-lg mx-auto flex flex-col relative z-0 overflow-hidden">
-        <Outlet />
+        <Outlet context={{ user }} />
       </main>
 
       {/* Guest Banner */}
@@ -300,6 +310,7 @@ export default function App() {
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<DinApp />} />
               <Route path="/timeline" element={<TimelinePage />} />
+              <Route path="/reflect" element={<ReflectChat />} />
             </Route>
           </Routes>
         </BrowserRouter>

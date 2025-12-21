@@ -1,11 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { useChat, type Message } from '../hooks/use-chat';
-import { ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useChat } from '../hooks/use-chat';
+import { SendHorizontal, Sparkles } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function ReflectChat() {
     const { messages, input, setInput, append, isLoading } = useChat();
-    const navigate = useNavigate();
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -14,7 +13,7 @@ export default function ReflectChat() {
         if (scrollRef.current) {
             scrollRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [messages]);
+    }, [messages, isLoading]);
 
     // Focus input on mount
     useEffect(() => {
@@ -24,80 +23,91 @@ export default function ReflectChat() {
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            if (!input.trim()) return;
+            if (!input.trim() || isLoading) return;
             append({ role: 'user', content: input });
             setInput('');
         }
     };
 
-    const intents = [
-        "Reflect on how you are growing",
-        "Identify what to improve next",
-        "Notice patterns in how you work",
-        "Decide what to double down on"
-    ];
-    const intent = useRef(intents[Math.floor(Math.random() * intents.length)]).current;
-
     return (
-        <div className="h-full flex flex-col bg-[#fcfcfc] text-zinc-800">
-            {/* Intent Header */}
-            <header className="px-6 py-6 flex items-center justify-between">
-                <button
-                    onClick={() => navigate(-1)}
-                    className="p-2 -ml-2 text-zinc-400 hover:text-zinc-600 transition-colors"
-                >
-                    <ArrowLeft className="w-5 h-5" />
-                </button>
-                <span className="text-sm font-medium text-zinc-400 tracking-wide uppercase opacity-70">
-                    Debrief
-                </span>
-                <div className="w-5" /> {/* Spacer */}
-            </header>
+        <div className="flex flex-col flex-1 w-full relative bg-zinc-50/30 overflow-hidden">
+            {/* Background Decor */}
+            <div className="absolute top-0 left-0 w-full h-[30vh] bg-gradient-to-b from-purple-50/50 to-transparent pointer-events-none" />
 
-            <div className="px-6 pb-2">
-                <h1 className="text-2xl font-light text-zinc-800 leading-snug tracking-tight">
-                    {intent}
-                </h1>
-            </div>
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+                {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full text-center opacity-0 animate-fade-in" style={{ animationFillMode: 'forwards' }}>
+                        <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-4 text-purple-600">
+                            <Sparkles className="w-6 h-6" />
+                        </div>
+                        <p className="text-zinc-500 font-medium">Reflect & Grow</p>
+                        <p className="text-zinc-400 text-sm mt-1 max-w-xs">
+                            How are you feeling today? What patterns are you noticing?
+                        </p>
+                    </div>
+                )}
 
-            {/* Message Stream */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-8">
-                {messages.map((m, i) => (
-                    <div
-                        key={i}
-                        className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
-                    >
+                {messages.map((m, i) => {
+                    const isUser = m.role === 'user';
+                    return (
                         <div
-                            className={`max-w-[90%] text-lg leading-relaxed whitespace-pre-wrap ${m.role === 'user'
-                                    ? 'text-zinc-900 border-l-2 border-zinc-200 pl-4 py-1'
-                                    : 'text-zinc-600'
-                                }`}
+                            key={i}
+                            className={cn(
+                                "flex w-full animate-in fade-in slide-in-from-bottom-2 duration-300",
+                                isUser ? "justify-end" : "justify-start"
+                            )}
                         >
-                            {m.content}
+                            <div
+                                className={cn(
+                                    "max-w-[85%] px-5 py-3 text-[15px] leading-relaxed whitespace-pre-wrap shadow-sm",
+                                    isUser
+                                        ? "bg-zinc-900 text-white rounded-2xl rounded-tr-sm"
+                                        : "bg-white border border-zinc-100 text-zinc-800 rounded-2xl rounded-tl-sm"
+                                )}
+                            >
+                                {m.content}
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {isLoading && (
+                    <div className="flex justify-start animate-in fade-in duration-300">
+                        <div className="bg-white border border-zinc-100 px-4 py-3 rounded-2xl rounded-tl-sm shadow-sm flex gap-1.5 items-center">
+                            <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                            <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                            <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" />
                         </div>
                     </div>
-                ))}
-                {isLoading && messages[messages.length - 1]?.role === 'user' && (
-                    <div className="text-zinc-300 text-sm animate-pulse">Thinking...</div>
                 )}
-                <div ref={scrollRef} />
+                <div ref={scrollRef} className="h-2" />
             </div>
 
-            {/* Input Composer */}
-            <div className="p-6 pb-10">
-                <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="What pattern are you noticing?"
-                    className="w-full bg-transparent border-none text-xl resize-none outline-none text-zinc-800 placeholder:text-zinc-300"
-                    rows={3}
-                    style={{ minHeight: '80px' }}
-                />
-                <div className="text-right">
-                    {/* Subtle send hint if needed, or just rely on Enter */}
-                    <span className="text-xs text-zinc-300">Enter to reflect</span>
+            {/* Input Area - Fixed at bottom of container */}
+            <div className="p-4 bg-white/80 backdrop-blur-md border-t border-zinc-100">
+                <div className="relative flex items-end gap-2 bg-white rounded-[24px] border border-zinc-200 shadow-sm focus-within:ring-2 focus-within:ring-purple-100 focus-within:border-purple-200 transition-all">
+                    <textarea
+                        ref={inputRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Message..."
+                        className="w-full bg-transparent border-none text-[16px] resize-none outline-none text-zinc-900 placeholder:text-zinc-400 px-4 py-3.5 max-h-[120px] min-h-[52px]"
+                        rows={1}
+                        style={{ height: 'auto', minHeight: '52px' }}
+                    />
+                    <button
+                        onClick={() => {
+                            if (!input.trim() || isLoading) return;
+                            append({ role: 'user', content: input });
+                            setInput('');
+                        }}
+                        disabled={!input.trim() || isLoading}
+                        className="mb-1.5 mr-1.5 p-2 bg-zinc-900 text-white rounded-full hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-zinc-900 transition-all active:scale-95"
+                    >
+                        <SendHorizontal className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
         </div>

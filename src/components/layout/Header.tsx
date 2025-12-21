@@ -1,5 +1,5 @@
-import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Clock, UserCircle, RefreshCcw, LogOut, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { UserCircle, RefreshCcw, LogOut } from 'lucide-react';
 import { type Session, signOut, signIn } from '@/lib/auth-client';
 import {
     DropdownMenu,
@@ -16,8 +16,6 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
     const navigate = useNavigate();
-    const location = useLocation();
-    const isHome = location.pathname === '/';
 
     const handleLogout = async () => {
         try {
@@ -30,62 +28,28 @@ export function Header({ user }: HeaderProps) {
         window.location.reload();
     };
 
-
-
     return (
-        <header className="flex-none p-4 flex justify-between items-center z-10 bg-transparent min-h-[4rem]">
-            {/* Left Action */}
-            <div className="w-10">
-                {isHome ? (
-                    <button
-                        onClick={() => navigate('/timeline')}
-                        className="p-2 -ml-2 text-zinc-400 hover:text-zinc-600 transition-colors rounded-full hover:bg-zinc-100"
-                        title="Timeline"
-                    >
-                        <Clock className="w-5 h-5" />
-                    </button>
-                ) : (
-                    <button
-                        onClick={() => navigate('/')}
-                        className="p-2 -ml-2 text-zinc-400 hover:text-zinc-600 transition-colors rounded-full hover:bg-zinc-100"
-                        title="Back"
-                    >
-                        <ArrowLeft className="w-5 h-5" />
-                    </button>
-                )}
+        <header className="fixed top-0 left-0 right-0 h-14 z-40 bg-white/80 backdrop-blur-md border-b border-zinc-100 flex items-center justify-between px-4 max-w-lg mx-auto">
+            {/* Brand / Title */}
+            <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-zinc-900 tracking-tight">din</span>
+                <span className="text-xs text-zinc-400 font-medium px-2 py-0.5 bg-zinc-100 rounded-full">v2</span>
             </div>
 
-            {/* Center Title */}
-            <div className="flex-1 text-center">
-                {!isHome ? (
-                    <h1 className="text-zinc-400 text-sm font-medium tracking-wide uppercase">
-                        Timeline
-                    </h1>
-                ) : (
-                    <button
-                        onClick={() => navigate('/reflect')}
-                        className="text-zinc-300 hover:text-zinc-600 transition-colors text-sm font-medium tracking-wide flex items-center justify-center gap-2 mx-auto px-3 py-1 rounded-full hover:bg-zinc-50"
-                    >
-                        <Sparkles className="w-4 h-4 opacity-70" />
-                        <span>Reflect</span>
-                    </button>
-                )}
-            </div>
-
-            {/* Right Profile Action */}
-            <div className="w-10 flex justify-end">
+            {/* Profile Action */}
+            <div className="flex items-center">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-400 shadow-sm border border-gray-200">
-                            <Avatar className="h-9 w-9">
+                        <button className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-zinc-200 transition-all active:scale-95">
+                            <Avatar className="h-8 w-8 border border-zinc-200">
                                 <AvatarImage src={user.image || undefined} alt={user.name} />
-                                <AvatarFallback className="bg-gray-200 text-gray-500">
+                                <AvatarFallback className="bg-zinc-100 text-zinc-500">
                                     <UserCircle className="w-5 h-5" />
                                 </AvatarFallback>
                             </Avatar>
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuContent align="end" className="w-56 mt-2">
                         <DropdownMenuItem
                             onClick={() => signIn.social({
                                 provider: 'google',

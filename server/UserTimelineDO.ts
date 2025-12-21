@@ -1,19 +1,16 @@
 import { DurableObject } from "cloudflare:workers";
-import { AIService } from "./ai-service";
 
 interface Env {
     AI: any;
+    // GEMINI_API_KEY no longer needed
 }
 
 export class UserTimelineDO extends DurableObject<Env> {
     sql: DurableObjectState["storage"]["sql"];
-    aiService: AIService;
 
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
-        this.aiService = new AIService(env.AI);
-
         this.initializeSchema();
     }
 
@@ -79,34 +76,12 @@ export class UserTimelineDO extends DurableObject<Env> {
             followUp ? JSON.stringify(followUp) : null
         );
 
-        // Generate Follow-Ups (Server-side AI)
-        // We only generate follow-ups for Root entries (depth 0) or 1st reply (depth 1), 
-        // assuming max depth 2.
-        // Also checks suppression.
-        let chips: { chipId: string, chipLabel: string, generationId: string }[] = [];
-
-        // Only generate if it's a root entry or first reply, AND user has internet 
-        // (implied by reaching here).
-        // Spec says: "Follow-up generation is triggered async". 
-        // For Phase 2 we return it inline if fast enough, or client handles "async" via polling/push.
-        // For simplicity now, we await it.
-        const recentContext = await this.getRecentContext(finalRootId);
-
-        const aiResult = await this.aiService.generateFollowUp(text, recentContext);
-        chips = aiResult.chips;
-
         return {
             entryId,
             confirmation: "Captured.",
-            followUps: chips,
-            analysis: aiResult.analysis
+            followUps: [],
+            analysis: undefined
         };
-    }
-
-    async getRecentContext(rootId: string): Promise<string[]> {
-        // Get thread history specifically
-        const rows = this.sql.exec("SELECT raw_text FROM entries WHERE root_id = ? ORDER BY created_at ASC", rootId).toArray() as { raw_text: string }[];
-        return rows.map(r => r.raw_text);
     }
 
     async append(data: { entryId: string, text: string }) {

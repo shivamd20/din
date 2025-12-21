@@ -3,17 +3,14 @@ import MDEditor from '@uiw/react-md-editor';
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { useSession, signIn, type Session } from './lib/auth-client';
 import { Image, Paperclip } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Attachment } from './lib/db';
 import { syncQueue, pullFromServer } from './lib/sync';
 import { v4 as uuidv4 } from 'uuid';
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { ContextSuggestions } from './components/ContextSuggestions';
 import TimelinePage from './components/TimelinePage';
 import { Header } from './components/layout/Header';
 import { GuestBanner } from './components/layout/GuestBanner';
-import { ReplyContextRef } from './components/ReplyContextRef';
 import { getMicrocopy } from './lib/microcopy';
 
 function ProtectedLayout() {
@@ -91,7 +88,6 @@ function ProtectedLayout() {
 }
 
 function DinApp() {
-  // ... state declarations
   const [text, setText] = useState(() => {
     if (typeof localStorage !== 'undefined') {
       return localStorage.getItem('din-draft') || '';
@@ -104,39 +100,8 @@ function DinApp() {
     localStorage.setItem('din-draft', text);
   }, [text]);
 
-  const [layoutState, setLayoutState] = useState<'IDLE' | 'CAPTURED' | 'DONE'>('IDLE');
-  const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
-  const [currentSuggestions, setCurrentSuggestions] = useState<{ chipId: string; chipLabel: string; generationId: string }[]>([]);
-  const [currentAnalysis, setCurrentAnalysis] = useState<string | undefined>(undefined);
+  const [layoutState, setLayoutState] = useState<'IDLE' | 'CAPTURED'>('IDLE');
   const [confirmationMsg, setConfirmationMsg] = useState("Captured.");
-  const [isThinking, setIsThinking] = useState(false);
-
-  // Reset state when entry changes
-  useEffect(() => {
-    setCurrentSuggestions([]);
-    setCurrentAnalysis(undefined);
-  }, [currentEntryId]);
-
-  // Reply State
-  const [replyContext, setReplyContext] = useState<{ id: string, text: string } | null>(null);
-
-  // Watch for suggestions
-  const activeEntry = useLiveQuery(
-    async () => {
-      if (!currentEntryId) return null;
-      return db.entries.get(currentEntryId);
-    },
-    [currentEntryId]
-  );
-
-  useEffect(() => {
-    if (activeEntry?.transientSuggestions) {
-      setCurrentSuggestions(activeEntry.transientSuggestions);
-    }
-    if (activeEntry?.transientAnalysis) {
-      setCurrentAnalysis(activeEntry.transientAnalysis);
-    }
-  }, [activeEntry]);
 
   // Rotate placeholders
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -148,7 +113,6 @@ function DinApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>, fileType: 'image' | 'file') => {
-    // ... same as before
     if (e.target.files && e.target.files.length > 0) {
       const newAtts: Attachment[] = Array.from(e.target.files).map(f => ({
         id: uuidv4(),
@@ -169,7 +133,6 @@ function DinApp() {
 
     const entryId = uuidv4();
     const now = Date.now();
-    const isReply = !!replyContext;
 
     try {
       // 1. Local Write
@@ -179,8 +142,8 @@ function DinApp() {
         text: text.trim(),
         attachments: attachments,
         synced: 0,
-        rootId: isReply ? replyContext.id : entryId,
-        parentId: isReply ? replyContext.id : undefined,
+        rootId: entryId,
+        parentId: undefined,
       });
 
       // 2. Clear UI & Draft
@@ -189,32 +152,16 @@ function DinApp() {
       localStorage.removeItem('din-draft');
 
       // 3. UI Transition
-      // If we were replying, we usually done (Depth 2 limit), or could show more chips?
-      // Spec says "Max 2 follow ups per entry".
-      // If we just saved a reply, we show "Got it" and reset.
-      // If we saved a root, we show "Captured" and maybe ContextSuggestions.
+      setLayoutState('CAPTURED');
+      setConfirmationMsg(getMicrocopy('CONFIRMATION'));
 
-      if (isReply) {
-        setLayoutState('DONE');
-        setConfirmationMsg(getMicrocopy('CLOSURE'));
-        setReplyContext(null); // Clear reply context
-        setTimeout(() => {
-          setLayoutState('IDLE');
-          setCurrentEntryId(null);
-        }, 1500);
-      } else {
-        setCurrentEntryId(entryId);
-        setLayoutState('CAPTURED');
-        setConfirmationMsg(getMicrocopy('CONFIRMATION'));
+      // Sync in background (fire and forget)
+      syncQueue();
 
-        // Trigger Sync immediately to get AI suggestions
-        setIsThinking(true);
-        try {
-          await syncQueue();
-        } finally {
-          setIsThinking(false);
-        }
-      }
+      // Reset to IDLE after 1.5s
+      setTimeout(() => {
+        setLayoutState('IDLE');
+      }, 1500);
 
     } catch (error) {
       console.error("Capture failed locally", error);
@@ -224,24 +171,7 @@ function DinApp() {
 
   /* Scroll helper */
   const scrollToActive = (e: React.FocusEvent<HTMLTextAreaElement>) => {
-    // optional: exact scroll logic
     e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
-  const onReply = (chip: { label: string, id: string, generationId: string }) => {
-    // User clicked a suggestion
-    if (!currentEntryId) return;
-
-    // We need the text of the entry we are replying to.
-    db.entries.get(currentEntryId).then(entry => {
-      if (entry) {
-        setReplyContext({ id: entry.id, text: entry.text });
-        setLayoutState('IDLE');
-        setPlaceholder(chip.label); // Use chip label as prompt
-        // We could store the provenance (chip.id, generationId) to save with the reply?
-        // App.tsx doesn't have state for that yet, but we can verify later.
-      }
-    });
   };
 
   return (
@@ -250,38 +180,9 @@ function DinApp() {
         {layoutState === 'CAPTURED' ? (
           <div className="flex-1 flex flex-col items-center justify-center animate-fade-in w-full max-w-md mx-auto">
             <p className="text-xl text-zinc-800 font-medium mb-2">{confirmationMsg}</p>
-            {currentEntryId && (
-              <ContextSuggestions
-                suggestions={currentSuggestions}
-                analysis={currentAnalysis}
-                loading={isThinking}
-                onReply={onReply}
-                onComplete={() => {
-                  setLayoutState('DONE');
-                  setConfirmationMsg(getMicrocopy('CLOSURE'));
-                  setTimeout(() => {
-                    setLayoutState('IDLE');
-                    setCurrentEntryId(null);
-                  }, 1500);
-                }}
-              />
-            )}
-          </div>
-        ) : layoutState === 'DONE' ? (
-          <div className="flex-1 flex flex-col items-center justify-center animate-fade-in">
-            <p className="text-xl text-zinc-500 font-medium">{confirmationMsg}</p>
           </div>
         ) : (
           <>
-            {replyContext && (
-              <ReplyContextRef
-                text={replyContext.text}
-                onDismiss={() => {
-                  setReplyContext(null);
-                  setPlaceholder("What happened?");
-                }}
-              />
-            )}
             <div className="flex-1 w-full flex flex-col" data-color-mode="light">
               <style>{`
                 /* Hide toolbar on mobile */

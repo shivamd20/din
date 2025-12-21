@@ -1,10 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useChat } from '../hooks/use-chat';
 import { SendHorizontal, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function ReflectChat() {
-    const { messages, input, setInput, append, isLoading } = useChat();
+    const { messages, sendMessage, status } = useChat();
+    const [input, setInput] = useState('');
+    const isLoading = status === 'submitted' || status === 'streaming';
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -24,7 +26,7 @@ export default function ReflectChat() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             if (!input.trim() || isLoading) return;
-            append({ role: 'user', content: input });
+            sendMessage({ role: 'user', content: input } as any);
             setInput('');
         }
     };
@@ -66,7 +68,7 @@ export default function ReflectChat() {
                                         : "bg-white border border-zinc-100 text-zinc-800 rounded-2xl rounded-tl-sm"
                                 )}
                             >
-                                {m.content}
+                                {(m as any).content}
                             </div>
                         </div>
                     );
@@ -100,7 +102,7 @@ export default function ReflectChat() {
                     <button
                         onClick={() => {
                             if (!input.trim() || isLoading) return;
-                            append({ role: 'user', content: input });
+                            sendMessage({ role: 'user', content: input } as any);
                             setInput('');
                         }}
                         disabled={!input.trim() || isLoading}

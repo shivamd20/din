@@ -1,34 +1,36 @@
-import { toolDefinition } from '@tanstack/ai';
+import { tool } from 'ai';
 import { z } from 'zod';
 import { UserTimelineDO } from './UserTimelineDO';
 
-export const createTools = (userTimeline: DurableObjectStub<UserTimelineDO>) => {
-    const getRecentLogs = toolDefinition({
-        name: 'getRecentLogs',
-        description: 'Get the recent logs/entries from the user\'s timeline.',
-        inputSchema: z.object({
-            limit: z.number().optional().default(20),
-        }),
-    }).server(async ({ limit }) => {
-        // Cast to any to avoid deep type instantiation issues with DurableObjectStub
-        const logs = await (userTimeline as any).getRecent(limit);
-        return logs as any;
-    });
+const getRecentLogsParameters = z.object({
+    limit: z.number().optional().default(20),
+});
 
-    const logToTimeline = toolDefinition({
-        name: 'logToTimeline',
-        description: 'Log a new entry to the user\'s timeline.',
-        inputSchema: z.object({
-            text: z.string(),
-        }),
-    }).server(async ({ text }) => {
-        const entryId = crypto.randomUUID();
-        await userTimeline.log({
-            entryId,
-            text,
-        });
-        return { success: true, message: "Logged." };
-    });
+const logToTimelineParameters = z.object({
+    text: z.string(),
+});
 
-    return [getRecentLogs, logToTimeline];
+export const createTools = (userTimeline: DurableObjectStub<UserTimelineDO>, userId: string) => {
+    return {
+        getRecentLogs: tool({
+            description: 'Get the recent logs/entries from the user\'s timeline. Use this to understand what the user has been doing recently.',
+            parameters: getRecentLogsParameters,
+            execute: async (args: any) => {
+                const { limit } = args;
+                const logs = await userTimeline.getRecentEntries(limit);
+                // Clean logs to remove any non-serializable properties from SQLite result
+                return logs.map(l => ({ ...l }));
+            },
+        } as any),
+
+        logToTimeline: tool({
+            description: 'Log a new entry to the user\'s timeline. Use this when the user explicitly asks to log something or shares a win/milestone.',
+            parameters: logToTimelineParameters,
+            execute: async (args: any) => {
+                const { text } = args;
+                await userTimeline.addEntry(userId, text, 'chat');
+                return { success: true, message: "Logged." };
+            },
+        } as any),
+    };
 };

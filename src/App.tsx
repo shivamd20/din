@@ -88,35 +88,7 @@ function ProtectedLayout() {
   );
 }
 
-import { Composer } from './components/features/Composer';
-
-function DinApp() {
-  const [layoutState, setLayoutState] = useState<'IDLE' | 'CAPTURED'>('IDLE');
-  const [confirmationMsg, setConfirmationMsg] = useState("Captured.");
-
-  const handleCapture = () => {
-    setLayoutState('CAPTURED');
-    setConfirmationMsg(getMicrocopy('CONFIRMATION'));
-    setTimeout(() => {
-      setLayoutState('IDLE');
-    }, 1500);
-  };
-
-  return (
-    <div className="flex-1 w-full bg-white relative flex flex-col h-full">
-      {layoutState === 'CAPTURED' ? (
-        <div className="flex flex-col items-center justify-center h-full animate-in fade-in zoom-in duration-300">
-          <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mb-4">
-            <div className="w-8 h-8 rounded-full bg-zinc-900 animate-pulse" />
-          </div>
-          <p className="text-xl font-medium text-zinc-800">{confirmationMsg}</p>
-        </div>
-      ) : (
-        <Composer onCapture={handleCapture} />
-      )}
-    </div>
-  );
-}
+import HomePage from './components/HomePage';
 
 export default function App() {
   return (
@@ -125,7 +97,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route element={<ProtectedLayout />}>
-              <Route path="/" element={<DinApp />} />
+              <Route path="/" element={<HomePage />} />
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/reflect" element={<ReflectChat />} />
             </Route>

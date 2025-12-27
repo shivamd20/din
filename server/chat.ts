@@ -1,3 +1,4 @@
+import { toServerSentEventsStream } from '@tanstack/ai';
 import { createAuth } from './auth';
 import { createTools } from './tools';
 import { AIModel } from './ai-model';
@@ -10,7 +11,10 @@ export async function handleChatRequest(request: Request, env: Env) {
         return new Response('Unauthorized', { status: 401 });
     }
 
-    const { messages, modelId } = await request.json() as { messages: any[], modelId?: string };
+    const { messages, modelId } = (await request.json()) as {
+        messages: Array<{ role: string; content: string }>;
+        modelId?: string;
+    };
 
     // Get UserTimelineDO stub
     const userTimeline = env.USER_TIMELINE_DO.get(
@@ -22,10 +26,17 @@ export async function handleChatRequest(request: Request, env: Env) {
     const aiModel = new AIModel(env);
 
     try {
-        const result = aiModel.streamChat(messages, tools, modelId);
-        return result.toTextStreamResponse();
-    } catch (err: any) {
+        const stream = aiModel.streamChat(messages, tools, modelId);
+        return new Response(toServerSentEventsStream(stream), {
+            headers: {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            },
+        });
+    } catch (err: unknown) {
         console.error('Chat error', err);
-        return new Response(err.message || 'Internal Error', { status: 500 });
+        const errorMessage = err instanceof Error ? err.message : 'Internal Error';
+        return new Response(errorMessage, { status: 500 });
     }
 }

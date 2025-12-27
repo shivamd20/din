@@ -1,4 +1,4 @@
-import { tool } from 'ai';
+import { toolDefinition } from '@tanstack/ai';
 import { z } from 'zod';
 import { UserTimelineDO } from './UserTimelineDO';
 
@@ -10,27 +10,36 @@ const logToTimelineParameters = z.object({
     text: z.string(),
 });
 
-export const createTools = (userTimeline: DurableObjectStub<UserTimelineDO>, userId: string) => {
-    return {
-        getRecentLogs: tool({
-            description: 'Get the recent logs/entries from the user\'s timeline. Use this to understand what the user has been doing recently.',
-            parameters: getRecentLogsParameters,
-            execute: async (args: any) => {
-                const { limit } = args;
-                const logs = await userTimeline.getRecentEntries(limit);
-                // Clean logs to remove any non-serializable properties from SQLite result
-                return logs.map(l => ({ ...l }));
-            },
-        } as any),
+// Define tool definitions
+const getRecentLogsDef = toolDefinition({
+    name: 'getRecentLogs',
+    description: 'Get the recent logs/entries from the user\'s timeline. Use this to understand what the user has been doing recently.',
+    inputSchema: getRecentLogsParameters,
+    outputSchema: z.array(z.any()),
+});
 
-        logToTimeline: tool({
-            description: 'Log a new entry to the user\'s timeline. Use this when the user explicitly asks to log something or shares a win/milestone.',
-            parameters: logToTimelineParameters,
-            execute: async (args: any) => {
-                const { text } = args;
-                await userTimeline.addEntry(userId, text, 'chat');
-                return { success: true, message: "Logged." };
-            },
-        } as any),
-    };
+const logToTimelineDef = toolDefinition({
+    name: 'logToTimeline',
+    description: 'Log a new entry to the user\'s timeline. Use this when the user explicitly asks to log something or shares a win/milestone.',
+    inputSchema: logToTimelineParameters,
+    outputSchema: z.object({
+        success: z.boolean(),
+        message: z.string(),
+    }),
+});
+
+export const createTools = (userTimeline: DurableObjectStub<UserTimelineDO>, userId: string) => {
+    return [
+        getRecentLogsDef.server(async (args: z.infer<typeof getRecentLogsParameters>) => {
+            const { limit } = args;
+            const logs = await userTimeline.getRecentEntries(limit);
+            // Clean logs to remove any non-serializable properties from SQLite result
+            return logs.map((l) => ({ ...l }));
+        }),
+        logToTimelineDef.server(async (args: z.infer<typeof logToTimelineParameters>) => {
+            const { text } = args;
+            await userTimeline.addEntry(userId, text, 'chat');
+            return { success: true, message: "Logged." };
+        }),
+    ];
 };

@@ -1,8 +1,9 @@
 import { trpc } from '../lib/trpc';
-import { format } from 'date-fns';
-import { Target, Loader2, Pause, Settings, Eye, HelpCircle } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import { Target, Loader2, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { useCapture } from '@/contexts/CaptureContext';
 
 export default function CommitmentsPage() {
     const { data: commitments, isLoading } = trpc.commitments.list.useQuery({
@@ -10,11 +11,37 @@ export default function CommitmentsPage() {
         include_history: false,
     });
     const [explainedId, setExplainedId] = useState<string | null>(null);
+    const { openCapture } = useCapture();
 
-    // Filter for only accepted/active commitments
+    // Filter for only active/acknowledged commitments
     const activeCommitments = commitments?.filter(
         c => c.status === 'active' || c.status === 'acknowledged'
     ) || [];
+
+    const handleAction = (action: string, commitment: typeof activeCommitments[0]) => {
+        let prefillText = '';
+        let eventType: 'commitment_acknowledge' | 'commitment_complete' | 'commitment_cancel' | undefined;
+        
+        switch (action) {
+            case 'acknowledge':
+                prefillText = ''; // User must provide text
+                eventType = 'commitment_acknowledge';
+                break;
+            case 'complete':
+                prefillText = `Completed ${commitment.content}`;
+                eventType = 'commitment_complete';
+                break;
+            case 'cancel':
+                prefillText = `Cancelling ${commitment.content}. Why?`;
+                eventType = 'commitment_cancel';
+                break;
+        }
+
+        openCapture(prefillText, eventType ? {
+            event_type: eventType,
+            linked_commitment_id: commitment.id,
+        } : undefined);
+    };
 
     if (isLoading) {
         return (
@@ -42,10 +69,11 @@ export default function CommitmentsPage() {
         <div className="h-full w-full bg-white overflow-y-auto overscroll-y-contain pb-32">
             <div className="max-w-xl mx-auto px-6 py-6 space-y-4">
                 {activeCommitments.map((commitment) => {
-                    // Calculate progress (simplified - you may want to track actual progress)
-                    const progress = commitment.status === 'active' ? 0.65 : 0.45; // Placeholder
-                    const frequency = commitment.horizon || 'weekly';
                     const strength = commitment.strength || 'medium';
+                    const progressScore = commitment.progress_score || 0;
+                    const lastAcknowledged = commitment.last_acknowledged_at 
+                        ? new Date(commitment.last_acknowledged_at) 
+                        : null;
 
                     return (
                         <div
@@ -57,7 +85,7 @@ export default function CommitmentsPage() {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                         <h3 className="text-[16px] font-semibold text-zinc-900 tracking-tight">
-                                            {commitment.content || `${strength} commitment`}
+                                            {commitment.content}
                                         </h3>
                                         <button
                                             onClick={() => setExplainedId(explainedId === commitment.id ? null : commitment.id)}
@@ -75,60 +103,56 @@ export default function CommitmentsPage() {
                                         </div>
                                     )}
 
-                                    {/* Frequency Badge */}
+                                    {/* Strength Badge */}
                                     <div className="flex items-center gap-2 mt-2">
-                                        <span className="px-2.5 py-1 bg-zinc-100 text-zinc-700 rounded-full text-xs font-medium capitalize">
-                                            {frequency}
-                                        </span>
                                         <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium capitalize">
                                             {strength}
-                                        </span>
-                                        <span className={cn(
-                                            "px-2.5 py-1 rounded-full text-xs font-medium",
-                                            commitment.status === 'active'
-                                                ? "bg-emerald-50 text-emerald-700"
-                                                : "bg-amber-50 text-amber-700"
-                                        )}>
-                                            {commitment.status}
                                         </span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Progress Bar */}
+                            {/* Subtle Progress Indicator */}
                             <div className="mb-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs text-zinc-500 font-medium">Progress</span>
-                                    <span className="text-xs text-zinc-400">{Math.round(progress * 100)}%</span>
-                                </div>
-                                <div className="h-2 bg-zinc-100 rounded-full overflow-hidden">
+                                <div className="h-1.5 bg-zinc-100 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-zinc-900 rounded-full transition-all duration-500"
-                                        style={{ width: `${progress * 100}%` }}
+                                        className="h-full bg-zinc-300 rounded-full transition-all duration-500"
+                                        style={{ width: `${Math.max(5, progressScore * 100)}%` }}
                                     />
                                 </div>
                             </div>
 
+                            {/* Last Acknowledged Time */}
+                            {lastAcknowledged && (
+                                <div className="mb-4 text-xs text-zinc-400">
+                                    Last acknowledged {formatDistanceToNow(lastAcknowledged, { addSuffix: true })}
+                                </div>
+                            )}
+
                             {/* Action Buttons */}
                             <div className="flex items-center gap-2 pt-2 border-t border-zinc-100">
-                                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors">
-                                    <Pause className="w-4 h-4" />
-                                    <span>Pause</span>
+                                <button
+                                    onClick={() => handleAction('acknowledge', commitment)}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors"
+                                >
+                                    <span>Acknowledge</span>
                                 </button>
-                                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors">
-                                    <Settings className="w-4 h-4" />
-                                    <span>Adjust</span>
+                                <button
+                                    onClick={() => handleAction('complete', commitment)}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors"
+                                >
+                                    <span>Complete</span>
                                 </button>
-                                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors ml-auto">
-                                    <Eye className="w-4 h-4" />
-                                    <span>Review</span>
+                                <button
+                                    onClick={() => handleAction('cancel', commitment)}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors ml-auto"
+                                >
+                                    <span>Cancel</span>
                                 </button>
                             </div>
 
                             {/* Metadata */}
                             <div className="mt-3 pt-3 border-t border-zinc-50 flex items-center gap-3 text-xs text-zinc-400">
-                                <span>v{commitment.version}</span>
-                                <span>•</span>
                                 <span>{format(new Date(commitment.created_at), 'MMM d, yyyy')}</span>
                             </div>
                         </div>
@@ -138,4 +162,3 @@ export default function CommitmentsPage() {
         </div>
     );
 }
-

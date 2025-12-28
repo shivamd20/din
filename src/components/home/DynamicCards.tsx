@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Play, CheckCircle2, Clock, X, MessageSquareQuote, CheckSquare, Zap, Target, ArrowRight, HelpCircle } from 'lucide-react';
+import { CheckCircle2, Clock, X, MessageSquareQuote, CheckSquare, Zap, Target, ArrowRight, HelpCircle } from 'lucide-react';
 import type { DynamicCardData, CardAction } from '../../hooks/use-home-data';
 import { cn } from '@/lib/utils';
 
 interface CardProps {
     data: DynamicCardData;
-    onAction: (action: CardAction['action'], cardId: string) => void;
+    onAction: (action: CardAction['action']) => void;
     onDismiss: (cardId: string) => void;
 }
 
@@ -90,7 +90,7 @@ export function FocusCard({ data, onAction, onDismiss }: CardProps) {
 
                 <div className="flex items-center gap-2 mt-1">
                     {data.actions.map((action, idx) => (
-                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action, data.id)} />
+                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action)} />
                     ))}
                 </div>
             </div>
@@ -126,7 +126,7 @@ export function TodoLiteCard({ data, onAction, onDismiss }: CardProps) {
                 {/* Actions for Todo card usually 'Done' means dismiss whole card */}
                 <div className="flex items-center gap-2 mt-1">
                     {data.actions.map((action, idx) => (
-                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action, data.id)} />
+                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action)} />
                     ))}
                 </div>
             </div>
@@ -153,7 +153,7 @@ export function ReflectionCard({ data, onAction, onDismiss }: CardProps) {
 
                 <div className="flex items-center gap-2 mt-1">
                     {data.actions.map((action, idx) => (
-                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action, data.id)} />
+                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action)} />
                     ))}
                 </div>
             </div>
@@ -178,7 +178,7 @@ export function HabitCard({ data, onAction, onDismiss }: CardProps) {
                         {data.actions.map((action, idx) => (
                             <button
                                 key={idx}
-                                onClick={() => onAction(action.action, data.id)}
+                                onClick={() => onAction(action.action)}
                                 className={cn(
                                     "text-[12px] font-medium px-3 py-1.5 rounded-xl transition-colors",
                                     action.variant === 'secondary'
@@ -213,7 +213,7 @@ export function GoalCard({ data, onAction, onDismiss }: CardProps) {
 
                 <div className="flex items-center gap-2 mt-1">
                     {data.actions.map((action, idx) => (
-                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action, data.id)} />
+                        <ActionButton key={idx} action={action.label} variant={action.variant} onClick={() => onAction(action.action)} />
                     ))}
                 </div>
             </div>

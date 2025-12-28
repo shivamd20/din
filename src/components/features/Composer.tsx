@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef, ChangeEvent, FormEvent } from 'react';
-import MDEditor from '@uiw/react-md-editor';
-// import { uuidv4 } from '@/lib/utils';
+import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { db } from '@/lib/db';
 import { getMicrocopy } from '@/lib/microcopy';
 import { syncQueue } from '@/lib/sync';
-import { Image, Paperclip, SendHorizontal } from 'lucide-react';
+import { Image, Paperclip } from 'lucide-react';
 
 interface ComposerProps {
     onCapture?: () => void;
@@ -71,6 +69,7 @@ export function Composer({ onCapture }: ComposerProps) {
             setText('');
             setAttachments([]);
             localStorage.removeItem('din-draft');
+            if (textareaRef.current) textareaRef.current.style.height = 'auto';
             syncQueue();
             if (onCapture) onCapture();
 
@@ -79,30 +78,30 @@ export function Composer({ onCapture }: ComposerProps) {
         }
     };
 
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Auto-resize textarea
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+        }
+    }, [text]);
+
     return (
         <div className="flex flex-col flex-1 h-full bg-white relative">
-            <style>{`
-                .w-md-editor-toolbar { display: none !important; }
-                .w-md-editor { box-shadow: none !important; border: none !important; }
-                .w-md-editor-content { background: transparent !important; }
-                .w-md-editor-text-pre, .w-md-editor-text-input { font-family: inherit !important; font-size: 1.125rem !important; line-height: 1.75rem !important; padding: 0 !important; }
-            `}</style>
-
             {/* Editor Area - Centered Vertical */}
             <div className="flex-1 flex flex-col justify-center px-6 overflow-y-auto">
                 <div className="w-full max-w-xl mx-auto py-8">
-                    <MDEditor
+                    <textarea
+                        ref={textareaRef}
                         value={text}
-                        onChange={(val?: string) => setText(val || '')}
-                        preview="edit"
-                        visibleDragbar={false}
-                        height={200}
-                        className="w-full bg-transparent"
-                        textareaProps={{
-                            placeholder: "What's happening?",
-                            autoFocus: true,
-                            className: "text-lg leading-relaxed text-zinc-900 placeholder:text-zinc-300 resize-none"
-                        }}
+                        onChange={(e) => setText(e.target.value)}
+                        placeholder="What's on your mind?"
+                        autoFocus
+                        rows={1}
+                        className="w-full bg-transparent text-lg leading-relaxed text-zinc-900 placeholder:text-zinc-300 resize-none outline-none min-h-[200px] max-h-[60vh] overflow-y-auto"
+                        style={{ fontFeatureSettings: '"kern"', WebkitFontSmoothing: 'antialiased' }}
                     />
                 </div>
             </div>

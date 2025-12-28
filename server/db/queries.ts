@@ -170,6 +170,8 @@ export const ENTRY_QUERIES = {
     `,
 
     GET_RECENT: `SELECT * FROM entries ORDER BY created_at DESC LIMIT ?`,
+
+    GET_BY_ID: `SELECT * FROM entries WHERE id = ?`,
 };
 
 // ============================================================================

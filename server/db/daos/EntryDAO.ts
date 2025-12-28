@@ -96,5 +96,13 @@ export class EntryDAO {
     getRecent(limit: number): Entry[] {
         return this.sql.exec<Entry>(ENTRY_QUERIES.GET_RECENT, limit).toArray();
     }
+
+    /**
+     * Get entry by ID
+     */
+    getById(id: string): Entry | null {
+        const result = this.sql.exec<Entry>(ENTRY_QUERIES.GET_BY_ID, id).one();
+        return result || null;
+    }
 }
 

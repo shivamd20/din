@@ -106,5 +106,61 @@ export class TaskService {
     getTasks(userId: string, options: GetTasksOptions = {}): Task[] {
         return this.taskDAO.get(userId, options);
     }
+
+    /**
+     * Update task status by creating a new version
+     */
+    updateTaskStatus(
+        userId: string,
+        taskId: string,
+        newStatus: string,
+        captureId: string,
+        payload?: { snoozedUntil?: number; plannedDate?: number }
+    ): void {
+        // Get current task
+        const tasks = this.taskDAO.get(userId, {});
+        const currentTask = tasks.find(t => t.id === taskId);
+        if (!currentTask) {
+            throw new Error(`Task ${taskId} not found`);
+        }
+
+        // Create new version with updated status
+        const maxVersion = this.taskDAO.getMaxVersion(userId, currentTask.content);
+        const newVersion = maxVersion + 1;
+        const now = Date.now();
+
+        const params: CreateTaskParams = {
+            id: crypto.randomUUID(), // New ID for new version
+            userId,
+            content: currentTask.content,
+            commitmentId: currentTask.commitment_id,
+            originEntryId: currentTask.origin_entry_id,
+            plannedDate: payload?.plannedDate ?? currentTask.planned_date,
+            durationMinutes: currentTask.duration_minutes,
+            preferredWindow: currentTask.preferred_window,
+            taskType: currentTask.task_type,
+            status: newStatus,
+            createdAt: now,
+            lastEventCaptureId: captureId,
+            timeSpentMinutes: currentTask.time_spent_minutes,
+            confidenceScore: currentTask.confidence_score,
+            snoozedUntil: payload?.snoozedUntil ?? currentTask.snoozed_until,
+            sourceType: currentTask.source_type,
+            version: newVersion,
+            triggerCaptureId: currentTask.trigger_capture_id,
+            sourceWindowDays: currentTask.source_window_days,
+            llmRunId: currentTask.llm_run_id,
+        };
+
+        this.taskDAO.create(params);
+    }
+
+    /**
+     * Get task by ID
+     */
+    getTaskById(userId: string, taskId: string): Task | undefined {
+        const tasks = this.taskDAO.get(userId, {});
+        return tasks.find(t => t.id === taskId);
+    }
 }
 

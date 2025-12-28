@@ -17,9 +17,9 @@ interface Attachment {
 }
 
 const PLACEHOLDERS = [
-    "What’s on your mind?",
+    "What's on your mind?",
     "Capture a thought...",
-    "What needs to get done?"
+    "What needs attention?"
 ];
 
 export function CaptureZone({ onCapture }: CaptureZoneProps) {

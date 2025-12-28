@@ -119,6 +119,42 @@ export class UserDO extends DurableObject<Env> {
     ): Promise<string> {
         const entryId = this.entryService.addEntry(userId, text, source, opts);
 
+        // Handle event-driven state transitions
+        if (opts?.eventType && opts?.linkedTaskId) {
+            const taskId = opts.linkedTaskId;
+            switch (opts.eventType) {
+                case 'task_start':
+                    this.taskService.updateTaskStatus(userId, taskId, 'started', entryId);
+                    break;
+                case 'task_snooze': {
+                    const snoozedUntil = opts.payload?.snoozedUntil ? new Date(opts.payload.snoozedUntil).getTime() : Date.now() + 24 * 60 * 60 * 1000; // Default: 24 hours
+                    this.taskService.updateTaskStatus(userId, taskId, 'planned', entryId, { snoozedUntil });
+                    break;
+                }
+                case 'task_skip':
+                    this.taskService.updateTaskStatus(userId, taskId, 'abandoned', entryId);
+                    break;
+                case 'task_finish':
+                    this.taskService.updateTaskStatus(userId, taskId, 'completed', entryId);
+                    break;
+            }
+        }
+
+        if (opts?.eventType && opts?.linkedCommitmentId) {
+            const commitmentId = opts.linkedCommitmentId;
+            switch (opts.eventType) {
+                case 'commitment_acknowledge':
+                    this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'acknowledged', entryId, true);
+                    break;
+                case 'commitment_complete':
+                    this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'completed', entryId, true);
+                    break;
+                case 'commitment_cancel':
+                    this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'cancelled', entryId);
+                    break;
+            }
+        }
+
         // Trigger workflow for background processing (non-blocking)
         if (this.env.SIGNALS_WORKFLOW) {
             this.state.waitUntil(
@@ -301,6 +337,53 @@ export class UserDO extends DurableObject<Env> {
 
     async getNextFeedVersion(userId: string): Promise<number> {
         return this.feedService.getNextFeedVersion(userId);
+    }
+
+    // ========================================================================
+    // Undo Support - Revert State Changes
+    // ========================================================================
+
+    async revertStateChange(userId: string, captureId: string): Promise<void> {
+        // Get the entry to find what it changed
+        const entry = this.entryDAO.getById(captureId);
+        if (!entry) {
+            throw new Error(`Entry ${captureId} not found`);
+        }
+
+        // If this capture changed a task, revert the task status
+        if (entry.linked_task_id && entry.event_type) {
+            const task = this.taskService.getTaskById(userId, entry.linked_task_id);
+            if (task) {
+                // Find the previous version of this task
+                const allTasks = this.taskDAO.get(userId, { include_history: true });
+                const taskVersions = allTasks.filter(t => t.content === task.content).sort((a, b) => b.version - a.version);
+                if (taskVersions.length > 1) {
+                    // Get the version before the current one
+                    const previousVersion = taskVersions[1];
+                    // Create a new version with the previous status
+                    this.taskService.updateTaskStatus(userId, entry.linked_task_id, previousVersion.status, captureId);
+                }
+            }
+        }
+
+        // If this capture changed a commitment, revert the commitment status
+        if (entry.linked_commitment_id && entry.event_type) {
+            const commitment = this.commitmentService.getCommitmentById(userId, entry.linked_commitment_id);
+            if (commitment) {
+                // Find the previous version of this commitment
+                const allCommitments = this.commitmentDAO.get(userId, { include_history: true });
+                const commitmentVersions = allCommitments.filter(c => c.origin_entry_id === commitment.origin_entry_id).sort((a, b) => b.version - a.version);
+                if (commitmentVersions.length > 1) {
+                    // Get the version before the current one
+                    const previousVersion = commitmentVersions[1];
+                    // Create a new version with the previous status
+                    this.commitmentService.updateCommitmentStatus(userId, entry.linked_commitment_id, previousVersion.status, captureId);
+                }
+            }
+        }
+
+        // Note: We don't delete the capture entry - it remains in history
+        // The state change is reverted by creating a new version with previous status
     }
 
     // ========================================================================

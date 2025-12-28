@@ -81,25 +81,35 @@ import HomePage from './components/HomePage';
 import AuthCallbackHandler from './components/AuthCallbackHandler';
 import TasksPage from './components/TasksPage';
 import CommitmentsPage from './components/CommitmentsPage';
+import { CaptureProvider } from './contexts/CaptureContext';
+import { CaptureBox } from './components/features/CaptureBox';
+import { UndoProvider } from './hooks/use-undo';
+import { UndoToast } from './components/ui/UndoToast';
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        <BrowserRouter>
-          <Routes>
-            {/* OAuth callback handler - must be before ProtectedLayout */}
-            <Route path="/api/auth/callback/*" element={<AuthCallbackHandler />} />
-            <Route element={<ProtectedLayout />}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/chat" element={<ReflectChat />} />
-              <Route path="/tasks" element={<TasksPage />} />
-              <Route path="/commitments" element={<CommitmentsPage />} />
-              {/* Hidden behind hamburger menu */}
-              <Route path="/timeline" element={<TimelinePage />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <CaptureProvider>
+          <UndoProvider>
+            <BrowserRouter>
+              <Routes>
+                {/* OAuth callback handler - must be before ProtectedLayout */}
+                <Route path="/api/auth/callback/*" element={<AuthCallbackHandler />} />
+                <Route element={<ProtectedLayout />}>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/chat" element={<ReflectChat />} />
+                  <Route path="/tasks" element={<TasksPage />} />
+                  <Route path="/commitments" element={<CommitmentsPage />} />
+                  {/* Hidden behind hamburger menu */}
+                  <Route path="/timeline" element={<TimelinePage />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+            <CaptureBox />
+            <UndoToast />
+          </UndoProvider>
+        </CaptureProvider>
       </trpc.Provider>
     </QueryClientProvider>
   );

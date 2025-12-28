@@ -92,5 +92,57 @@ export class CommitmentService {
     getCommitments(userId: string, options: GetCommitmentsOptions = {}): Commitment[] {
         return this.commitmentDAO.get(userId, options);
     }
+
+    /**
+     * Update commitment status by creating a new version
+     */
+    updateCommitmentStatus(
+        userId: string,
+        commitmentId: string,
+        newStatus: string,
+        captureId: string,
+        updateProgress?: boolean
+    ): void {
+        // Get current commitment
+        const commitments = this.commitmentDAO.get(userId, {});
+        const currentCommitment = commitments.find(c => c.id === commitmentId);
+        if (!currentCommitment) {
+            throw new Error(`Commitment ${commitmentId} not found`);
+        }
+
+        // Create new version with updated status
+        const maxVersion = this.commitmentDAO.getMaxVersion(userId, currentCommitment.origin_entry_id);
+        const newVersion = maxVersion + 1;
+        const now = Date.now();
+
+        const params: CreateCommitmentParams = {
+            id: crypto.randomUUID(), // New ID for new version
+            userId,
+            originEntryId: currentCommitment.origin_entry_id,
+            content: currentCommitment.content,
+            strength: currentCommitment.strength,
+            horizon: currentCommitment.horizon,
+            status: newStatus,
+            createdAt: now,
+            expiresAt: currentCommitment.expires_at,
+            lastAcknowledgedAt: newStatus === 'acknowledged' || newStatus === 'active' ? now : currentCommitment.last_acknowledged_at,
+            progressScore: updateProgress ? Math.min(1.0, currentCommitment.progress_score + 0.1) : currentCommitment.progress_score,
+            sourceType: currentCommitment.source_type,
+            version: newVersion,
+            triggerCaptureId: currentCommitment.trigger_capture_id,
+            sourceWindowDays: currentCommitment.source_window_days,
+            llmRunId: currentCommitment.llm_run_id,
+        };
+
+        this.commitmentDAO.create(params);
+    }
+
+    /**
+     * Get commitment by ID
+     */
+    getCommitmentById(userId: string, commitmentId: string): Commitment | undefined {
+        const commitments = this.commitmentDAO.get(userId, {});
+        return commitments.find(c => c.id === commitmentId);
+    }
 }
 

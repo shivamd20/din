@@ -42,6 +42,10 @@ export const appRouter = t.router({
                 rootId: z.string().optional(),
                 parentId: z.string().optional(),
                 followUp: z.any().optional(), // Provenance data
+                event_type: z.enum(['task_start', 'task_snooze', 'task_skip', 'task_finish', 'commitment_acknowledge', 'commitment_complete', 'commitment_cancel', 'clarification_response']).optional(),
+                linked_task_id: z.string().optional(),
+                linked_commitment_id: z.string().optional(),
+                event_payload: z.record(z.string(), z.any()).optional(),
             }))
             .mutation(async ({ ctx, input }) => {
                 // Map legacy input to addEntry options
@@ -49,7 +53,11 @@ export const appRouter = t.router({
                     id: input.entryId,
                     attachments: input.attachments,
                     rootId: input.rootId,
-                    parentId: input.parentId
+                    parentId: input.parentId,
+                    linkedTaskId: input.linked_task_id,
+                    linkedCommitmentId: input.linked_commitment_id,
+                    eventType: input.event_type,
+                    payload: input.event_payload
                 });
 
                 // Return empty structure to satisfy legacy UI
@@ -176,6 +184,17 @@ export const appRouter = t.router({
             .query(async ({ ctx, input }) => {
                 // Use direct RPC call instead of fetch()
                 return await ctx.userDO.getFeedHistory(ctx.userId, input.limit);
+            }),
+    }),
+
+    undo: t.router({
+        revert: t.procedure
+            .input(z.object({
+                captureId: z.string(),
+            }))
+            .mutation(async ({ ctx, input }) => {
+                await ctx.userDO.revertStateChange(ctx.userId, input.captureId);
+                return { success: true };
             }),
     }),
 });

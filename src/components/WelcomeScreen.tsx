@@ -38,7 +38,7 @@ export function WelcomeScreen() {
                 {/* Hero Section */}
                 <div className="text-center mb-16 mt-4">
                     <div className="inline-flex items-center justify-center mb-6">
-                        <img src="/assets/logo.svg" alt="Din logo" className="w-24 h-24" />
+                        <img src="/logo.svg" alt="Din logo" className="w-24 h-24" />
                     </div>
                     <h1 className="text-4xl font-bold text-zinc-900 tracking-tight mb-4">
                         DIN.

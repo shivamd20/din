@@ -5,12 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vite.dev/config/
 export default defineConfig({
+  publicDir: 'static',
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['assets/logo.svg'],
+      includeAssets: ['logo.svg'],
       manifest: {
         name: 'Din',
         short_name: 'Din',
@@ -19,17 +20,17 @@ export default defineConfig({
         background_color: '#061523',
         icons: [
           {
-            src: 'assets/logo.svg',
+            src: 'logo.svg',
             sizes: 'any',
             type: 'image/svg+xml'
           },
           {
-            src: 'assets/logo.svg',
+            src: 'logo.svg',
             sizes: '192x192',
             type: 'image/svg+xml'
           },
           {
-            src: 'assets/logo.svg',
+            src: 'logo.svg',
             sizes: '512x512',
             type: 'image/svg+xml'
           }

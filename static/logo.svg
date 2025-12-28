@@ -1,0 +1,25 @@
+<svg width="220" height="160" viewBox="25 20 170 115" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="warmSun" cx="110" cy="88" r="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFA94D"/>
+      <stop offset="55%" stop-color="#F6C58B"/>
+      <stop offset="100%" stop-color="#3D6FA6"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="110" cy="88" r="26" fill="url(#warmSun)"/>
+
+  <g stroke="#1E2A36" stroke-width="6" stroke-linecap="round">
+    <line x1="110" y1="26" x2="110" y2="54"/>
+    <line x1="82" y1="32" x2="94" y2="58"/>
+    <line x1="138" y1="32" x2="126" y2="58"/>
+    <line x1="62" y1="52" x2="84" y2="70"/>
+    <line x1="158" y1="52" x2="136" y2="70"/>
+    <line x1="172" y1="80" x2="144" y2="82"/>
+    <line x1="38" y1="80" x2="66" y2="82"/>
+    <path d="M36 104C78 100 142 100 184 104"/>
+    <path d="M48 116C88 114 132 114 172 116"/>
+    <path d="M60 128C94 128 126 128 160 128"/>
+  </g>
+</svg>
+

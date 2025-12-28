@@ -90,6 +90,7 @@ function ProtectedLayout() {
 }
 
 import HomePage from './components/HomePage';
+import AuthCallbackHandler from './components/AuthCallbackHandler';
 
 export default function App() {
   return (
@@ -97,6 +98,8 @@ export default function App() {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <BrowserRouter>
           <Routes>
+            {/* OAuth callback handler - must be before ProtectedLayout */}
+            <Route path="/api/auth/callback/*" element={<AuthCallbackHandler />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/timeline" element={<TimelinePage />} />

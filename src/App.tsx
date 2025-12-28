@@ -1,19 +1,13 @@
-import React, { useState, useEffect, type FormEvent, useRef, type ChangeEvent } from 'react';
-import MDEditor from '@uiw/react-md-editor';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { useSession, signIn, type Session } from './lib/auth-client';
-import { Image, Paperclip } from 'lucide-react';
-import { db, type Attachment } from './lib/db';
 import { syncQueue, pullFromServer } from './lib/sync';
-import { v4 as uuidv4 } from 'uuid';
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
 import TimelinePage from './components/TimelinePage';
 import SignalsPage from './components/SignalsPage';
 import ReflectChat from './components/ReflectChat';
 import { Header } from './components/layout/Header';
-import { GuestBanner } from './components/layout/GuestBanner';
-import { getMicrocopy } from './lib/microcopy';
 
 import { BottomNav } from './components/layout/BottomNav';
 

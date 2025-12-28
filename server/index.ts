@@ -12,23 +12,10 @@ import { appRouter, type Context } from "./trpc";
 export { UserTimelineDO, UserSignalsDO, UserCommitmentsDO, UserTasksDO, UserFeedDO, SignalsWorkflow, FeedWorkflow };
 
 export default {
-	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-
-		console.log({ 
-			env,
-			API_KEY: await env.ANTHROPIC_API_KEY.get(),
-		 })
-
+	async fetch(request: Request, env: Env): Promise<Response> {
 
 	
-
-
 		const url = new URL(request.url);
-
-		if(url.pathname.startsWith("/api/anthropic")){
-			const key = await env.ANTHROPIC_API_KEY.get();
-			return new Response(key ?? "missing");
-		 }
 
 		const auth = createAuth(env);
 		

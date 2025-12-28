@@ -13,6 +13,12 @@
 	"migrations": [
 		{
 			"new_sqlite_classes": [
+				"UserTimelineDO"
+			],
+			"tag": "v2"
+		},
+		{
+			"new_sqlite_classes": [
 				"UserSignalsDO",
 				"UserCommitmentsDO",
 				"UserTasksDO"

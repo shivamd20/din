@@ -13,6 +13,12 @@ export { UserTimelineDO, UserSignalsDO, UserCommitmentsDO, UserTasksDO, UserFeed
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+
+		console.log({ 
+			env,
+			API_KEY: await env.ANTHROPIC_API_KEY.get(),
+		 })
+
 		const url = new URL(request.url);
 
 		const auth = createAuth(env);

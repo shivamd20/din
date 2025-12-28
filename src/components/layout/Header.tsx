@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { UserCircle, RefreshCcw, LogOut, Menu, Clock, Sparkles } from 'lucide-react';
+import { UserCircle, RefreshCcw, LogOut, Menu, Clock } from 'lucide-react';
 import { type Session, signOut, signIn } from '@/lib/auth-client';
 import {
     DropdownMenu,
@@ -33,6 +33,7 @@ export function Header({ user }: HeaderProps) {
         <header className="fixed top-0 left-0 right-0 h-14 z-40 bg-white/95 backdrop-blur-xl border-b border-zinc-100/80 shadow-[0_2px_20px_-8px_rgba(0,0,0,0.08)] flex items-center justify-between px-4 max-w-lg mx-auto">
             {/* Brand / Title */}
             <div className="flex items-center gap-2">
+                <img src="/assets/logo.svg" alt="Din" className="h-8 w-8" />
                 <span className="text-lg font-bold text-zinc-900 tracking-tight">din</span>
                 <span className="text-xs text-zinc-400 font-medium px-2 py-0.5 bg-zinc-100/80 rounded-full">v2</span>
             </div>
@@ -53,13 +54,6 @@ export function Header({ user }: HeaderProps) {
                         >
                             <Clock className="mr-2 h-4 w-4" />
                             <span>Timeline</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => navigate('/signals')}
-                            className="cursor-pointer"
-                        >
-                            <Sparkles className="mr-2 h-4 w-4" />
-                            <span>Signals</span>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

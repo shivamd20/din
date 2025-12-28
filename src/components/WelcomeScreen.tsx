@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { signIn } from '@/lib/auth-client';
-import { Sparkles, Zap, MessageSquare, Target, WifiOff } from 'lucide-react';
+import { Zap, MessageSquare, Target, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function WelcomeScreen() {
@@ -37,8 +37,8 @@ export function WelcomeScreen() {
             <div className="relative max-w-lg mx-auto px-6 py-12 pb-20 min-h-full flex flex-col">
                 {/* Hero Section */}
                 <div className="text-center mb-16 mt-4">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-zinc-900 text-white mb-6 shadow-lg">
-                        <Sparkles className="w-8 h-8" />
+                    <div className="inline-flex items-center justify-center mb-6">
+                        <img src="/assets/logo.svg" alt="Din logo" className="w-24 h-24" />
                     </div>
                     <h1 className="text-4xl font-bold text-zinc-900 tracking-tight mb-4">
                         DIN.

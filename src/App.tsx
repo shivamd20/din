@@ -5,7 +5,6 @@ import { syncQueue, pullFromServer } from './lib/sync';
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
 import TimelinePage from './components/TimelinePage';
-import SignalsPage from './components/SignalsPage';
 import ReflectChat from './components/ReflectChat';
 import { Header } from './components/layout/Header';
 import { WelcomeScreen } from './components/WelcomeScreen';
@@ -15,7 +14,7 @@ function ProtectedLayout() {
   const { data: session, isPending, error } = useSession();
 
   // Offline Auth: Fallback to cached session
-  const [cachedSession, setCachedSession] = useState<Session | null>(() => {
+  const [cachedSession] = useState<Session | null>(() => {
     if (typeof localStorage !== 'undefined') {
       const stored = localStorage.getItem('din-session');
       return stored ? JSON.parse(stored) : null;
@@ -98,7 +97,6 @@ export default function App() {
               <Route path="/commitments" element={<CommitmentsPage />} />
               {/* Hidden behind hamburger menu */}
               <Route path="/timeline" element={<TimelinePage />} />
-              <Route path="/signals" element={<SignalsPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

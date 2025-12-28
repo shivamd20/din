@@ -4,12 +4,6 @@ import { AIModel } from './ai-model';
 import type { FeedItem } from './feed-generator';
 import type { FeedItemRendered } from './UserFeedDO';
 
-export interface Env {
-    GEMINI_API_KEY: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    AI: any;
-}
-
 const FeedItemRenderedSchema = z.object({
     id: z.string(),
     phrasing: z.string(),
@@ -31,13 +25,13 @@ export async function phraseFeedItems(
     items: FeedItem[],
     currentTime: number,
     userContext?: string,
-    env?: Env
+    env?: Env & { USE_MOCK_ADAPTER?: string; USE_MOCK_ADAPTER_DEBUG?: string }
 ): Promise<FeedItemRendered[]> {
     if (!env) {
         throw new Error('Environment not provided');
     }
 
-    const aiModel = new AIModel(env);
+    const aiModel = new AIModel(env as Env & { USE_MOCK_ADAPTER?: string; USE_MOCK_ADAPTER_DEBUG?: string });
     const adapter = aiModel.getAdapter();
 
     const currentTimeStr = new Date(currentTime).toLocaleString('en-US', {
@@ -90,11 +84,11 @@ Rules:
 - Map actions to user-friendly labels (e.g., "complete" → "Done", "snooze" → "Snooze", "start" → "Start 25m")`;
 
     try {
+        // TanStack AI doesn't support 'system' role, so we prepend it to the user message
         const result = await chat({
             adapter,
             messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
+                { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
             ],
             outputSchema: FeedPhrasingOutputSchema
         });
@@ -118,8 +112,7 @@ Rules:
             const result = await chat({
                 adapter,
                 messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
+                    { role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }
                 ],
                 outputSchema: FeedPhrasingOutputSchema
             });

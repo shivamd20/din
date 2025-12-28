@@ -20,6 +20,7 @@ interface FeedSnapshot {
     feed_version: number;
     generated_at: number;
     items_json: string; // JSON string of FeedItemRendered[]
+    [key: string]: SqlStorageValue;
 }
 
 export class UserFeedDO extends DurableObject<Env> {

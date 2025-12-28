@@ -151,7 +151,7 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
             }
 
             // Step 5: Score and rank
-            const scoredItems = await step.do(
+            const rankedItems = await step.do(
                 "score-and-rank",
                 async () => {
                     const scored = scoreItems(candidates, currentTime);
@@ -163,7 +163,7 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
             const phrasedItems = await step.do(
                 "phrase-items",
                 async () => {
-                    return await phraseFeedItems(scoredItems, currentTime, undefined, this.env as any);
+                    return await phraseFeedItems(rankedItems, currentTime, undefined, this.env as any);
                 }
             );
 

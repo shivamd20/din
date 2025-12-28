@@ -6,6 +6,7 @@ export interface Env {
     GEMINI_API_KEY: string;
     AI: any;
     SIGNALS_WORKFLOW?: Workflow<WorkflowParams>;
+    FEED_WORKFLOW?: Workflow<{ userId: string; triggerCaptureId?: string }>;
 }
 
 interface Entry {

@@ -11,6 +11,7 @@ declare namespace Cloudflare {
 		GOOGLE_CLIENT_ID: string;
 		GOOGLE_CLIENT_SECRET: string;
 		AUTH_BASE_URL: string;
+		GEMINI_API_KEY: string;
 		VITE_MIXPANEL_TOKEN: string;
 		VITE_CLARITY_PROJECT_ID: string;
 		USE_MOCK_ADAPTER: string;

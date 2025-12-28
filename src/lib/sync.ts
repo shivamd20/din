@@ -125,7 +125,7 @@ export async function pullFromServer() {
         await db.transaction('rw', db.entries, async () => {
             for (const sEntry of serverEntries) {
                 // Check if we have a local version
-                const local = await db.entries.get(sEntry.entry_id as string);
+                const local = await db.entries.get(String(sEntry.entry_id));
 
                 // If local exists and is unsynced, SKIP (Client has pending changes)
                 if (local && local.synced === 0) {
@@ -135,20 +135,21 @@ export async function pullFromServer() {
                 // Parse attachments
                 let attachments = [];
                 try {
-                    attachments = JSON.parse(sEntry.attachments_json || '[]');
+                    const attachmentsJson = sEntry.attachments_json;
+                    attachments = JSON.parse(typeof attachmentsJson === 'string' ? attachmentsJson : '[]');
                 } catch (e) {
                     console.error("Failed to parse attachments", e);
                 }
 
                 // Otherwise, upsert (New entry OR Overwrite synced entry)
                 await db.entries.put({
-                    id: sEntry.entry_id as string,
+                    id: String(sEntry.entry_id),
                     created_at: sEntry.created_at as number,
                     text: sEntry.raw_text as string,
                     attachments: attachments, // Remote attachments will have keys, no blobs
                     synced: 1, // It came from server, so it is synced
-                    rootId: (sEntry.root_id as string) || (sEntry.entry_id as string),
-                    parentId: sEntry.parent_id as string | undefined
+                    rootId: (sEntry.root_id ? String(sEntry.root_id) : null) || String(sEntry.entry_id),
+                    parentId: sEntry.parent_id ? String(sEntry.parent_id) : undefined
                 });
             }
         });

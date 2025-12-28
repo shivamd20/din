@@ -260,7 +260,7 @@ export function buildCandidates(
 /**
  * Score items based on urgency, importance, and time alignment
  */
-export function scoreItems(items: FeedItem[], currentTime: number): FeedItem[] {
+export function scoreItems(items: FeedItem[], currentTime: number): (FeedItem & { score: number })[] {
     const hour = new Date(currentTime).getHours();
     const dayOfWeek = new Date(currentTime).getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;

@@ -97,7 +97,7 @@ export default {
 			);
 			const userFeed = env.USER_FEED_DO.get(
 				env.USER_FEED_DO.idFromName(userId)
-			);
+			) as DurableObjectStub<UserFeedDO>;
 
 			return fetchRequestHandler({
 				endpoint: '/api/trpc',

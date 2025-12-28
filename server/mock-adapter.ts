@@ -140,6 +140,7 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
     ): Promise<StructuredOutputResult<unknown>> {
         if (this.mockConfig.debug) {
             console.log('[MockAdapter] Generating structured output for:', options.chatOptions.messages);
+            console.log('[MockAdapter] Output schema:', JSON.stringify(options.outputSchema, null, 2));
         }
 
         // Simulate network delay
@@ -152,8 +153,24 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
         let structuredData: unknown;
         try {
             structuredData = JSON.parse(response);
+            
+            // Validate that the parsed data matches the schema structure
+            // If it doesn't, fall back to schema-based generation
+            if (options.outputSchema && !this.validateAgainstSchema(structuredData, options.outputSchema)) {
+                if (this.mockConfig.debug) {
+                    console.log('[MockAdapter] Response does not match schema, generating from schema');
+                }
+                structuredData = this.createMockStructuredResponse(options.outputSchema);
+            }
         } catch {
+            if (this.mockConfig.debug) {
+                console.log('[MockAdapter] Failed to parse JSON, generating from schema');
+            }
             structuredData = this.createMockStructuredResponse(options.outputSchema);
+        }
+
+        if (this.mockConfig.debug) {
+            console.log('[MockAdapter] Returning structured data:', JSON.stringify(structuredData, null, 2));
         }
 
         return {
@@ -176,7 +193,103 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
 
         const userContent = lastUserMessage.content.toLowerCase();
 
-        // Handle structured output requests
+        // Handle feed phrasing requests
+        if (userContent.includes('phrasing feed items') || 
+            userContent.includes('feed items to phrase') ||
+            (userContent.includes('feed') && userContent.includes('items') && userContent.includes('phrase'))) {
+            // Try to extract feed items from the message
+            let feedItems: Array<{ id: string; type: string; description: string; suggested_actions: string[] }> = [];
+            try {
+                // Look for JSON in the message
+                const jsonMatch = lastUserMessage.content.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (Array.isArray(parsed)) {
+                        feedItems = parsed;
+                    }
+                }
+            } catch {
+                // If parsing fails, create mock items
+                feedItems = [
+                    { id: 'task-1', type: 'task', description: 'Complete important task', suggested_actions: ['complete', 'snooze'] },
+                    { id: 'commitment-1', type: 'commitment', description: 'Follow through on commitment', suggested_actions: ['acknowledge', 'skip'] },
+                    { id: 'reminder-1', type: 'reminder', description: 'Actionable reminder', suggested_actions: ['start', 'snooze'] }
+                ];
+            }
+
+            // Generate phrased feed items
+            const phrasedItems = feedItems.map(item => {
+                let phrasing = '';
+                let supportingNote = '';
+                
+                if (item.type === 'task') {
+                    phrasing = `You have a task: ${item.description}. Want to tackle it now?`;
+                    supportingNote = 'This task is ready to be completed.';
+                } else if (item.type === 'commitment') {
+                    phrasing = `You committed to: ${item.description}. How's it going?`;
+                    supportingNote = 'This commitment is important to you.';
+                } else if (item.type === 'reminder') {
+                    phrasing = `Reminder: ${item.description}. Ready to start?`;
+                    supportingNote = 'This is a good time to act on this.';
+                } else if (item.type === 'habit') {
+                    phrasing = `Habit reminder: ${item.description}. Time to check in?`;
+                    supportingNote = 'This habit helps you stay consistent.';
+                } else {
+                    phrasing = item.description;
+                }
+
+                const actionLabelMap: Record<string, string> = {
+                    'complete': 'Done',
+                    'snooze': 'Snooze',
+                    'skip': 'Skip',
+                    'start': 'Start 25m',
+                    'acknowledge': 'Acknowledge',
+                    'done': 'Done',
+                    'remind': 'Remind me',
+                    'open_capture': 'Log'
+                };
+
+                return {
+                    id: item.id,
+                    phrasing,
+                    supporting_note: supportingNote,
+                    suggested_actions: item.suggested_actions.map(action => ({
+                        action,
+                        label: actionLabelMap[action] || action
+                    }))
+                };
+            });
+
+            return JSON.stringify({ items: phrasedItems });
+        }
+
+        // Handle batch signals/commitments/tasks generation
+        if (userContent.includes('analyzing user captures') || 
+            (userContent.includes('signals') && userContent.includes('commitments') && userContent.includes('tasks'))) {
+            // Extract entry IDs from the message if possible
+            const entryIdMatches = lastUserMessage.content.match(/ID: ([a-f0-9-]+)/gi);
+            const entryIds = entryIdMatches ? entryIdMatches.map(m => m.replace('ID: ', '')) : ['mock-entry-1', 'mock-entry-2'];
+            
+            return JSON.stringify({
+                signals: entryIds.slice(0, 2).flatMap(entryId => [
+                    { entry_id: entryId, key: 'actionability', value: 0.5, confidence: 0.8 },
+                    { entry_id: entryId, key: 'temporal_proximity', value: 0.6, confidence: 0.7 },
+                    { entry_id: entryId, key: 'consequence_strength', value: 0.4, confidence: 0.75 },
+                ]),
+                commitments: entryIds.slice(0, 1).map(entryId => ({
+                    origin_entry_id: entryId,
+                    strength: 'medium',
+                    horizon: 'short',
+                    content: 'Mock commitment from batch processing'
+                })),
+                tasks: [
+                    { content: 'Complete mock task from batch processing', priority: 'high' },
+                    { content: 'Follow up on mock task', priority: 'medium', due_date: Date.now() + 7 * 24 * 60 * 60 * 1000 }
+                ]
+            });
+        }
+
+        // Handle structured output requests (single entry signals)
         if (userContent.includes('extract') || userContent.includes('signal') || userContent.includes('json')) {
             return JSON.stringify({
                 actionability: 0.5,
@@ -245,6 +358,44 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
     }
 
     /**
+     * Validate that data matches the expected schema structure
+     */
+    private validateAgainstSchema(data: unknown, schema: JSONSchema): boolean {
+        if (!schema?.properties || typeof data !== 'object' || data === null) {
+            return false;
+        }
+
+        const dataObj = data as Record<string, unknown>;
+        
+        for (const [key, field] of Object.entries(schema.properties)) {
+            const fieldSchema = field as JSONSchema;
+            const type = Array.isArray(fieldSchema.type) 
+                ? fieldSchema.type[0] 
+                : fieldSchema.type;
+            
+            if (!(key in dataObj)) {
+                return false;
+            }
+
+            if (type === 'array') {
+                if (!Array.isArray(dataObj[key])) {
+                    return false;
+                }
+            } else if (type === 'number') {
+                if (typeof dataObj[key] !== 'number') {
+                    return false;
+                }
+            } else if (type === 'string') {
+                if (typeof dataObj[key] !== 'string') {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Create a mock structured response based on schema
      */
     private createMockStructuredResponse(
@@ -258,7 +409,32 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
                 const type = Array.isArray(fieldSchema.type) 
                     ? fieldSchema.type[0] 
                     : fieldSchema.type;
-                if (type === 'number') {
+                
+                if (type === 'array' && fieldSchema.items) {
+                    // Handle arrays - return array with at least one mock item
+                    const itemSchema = fieldSchema.items as JSONSchema;
+                    if (itemSchema.type === 'object' && itemSchema.properties) {
+                        // Create a mock object for array items
+                        const mockItem: Record<string, unknown> = {};
+                        for (const [itemKey, itemField] of Object.entries(itemSchema.properties)) {
+                            const itemFieldSchema = itemField as JSONSchema;
+                            const itemType = Array.isArray(itemFieldSchema.type) 
+                                ? itemFieldSchema.type[0] 
+                                : itemFieldSchema.type;
+                            if (itemType === 'number') {
+                                mockItem[itemKey] = 0.5;
+                            } else if (itemType === 'string') {
+                                mockItem[itemKey] = `mock-${itemKey}`;
+                            } else {
+                                mockItem[itemKey] = null;
+                            }
+                        }
+                        // Return array with one item (not empty)
+                        result[key] = [mockItem];
+                    } else {
+                        result[key] = [];
+                    }
+                } else if (type === 'number') {
                     // Return a value between 0 and 1 for signal extraction
                     result[key] = 0.5;
                 } else if (type === 'string') {

@@ -1,3 +1,5 @@
+import React from 'react';
+import { trpc } from '../lib/trpc';
 
 export interface ContextStripData {
     label: string;
@@ -40,62 +42,67 @@ export function useContextStrip() {
     return { data };
 }
 
-export function useDynamicCards() {
-    // Mock data for cards
-    const cards: DynamicCardData[] = [
-        {
-            id: 'c1',
-            type: 'focus',
-            title: 'Focus now',
-            content: 'You said you wanted to work on the Din UI today. Want to do 25 mins now?',
-            actions: [
-                { label: 'Start 25m', action: 'start', variant: 'primary' },
-                { label: 'Snooze', action: 'snooze', variant: 'secondary' }
-            ]
-        },
-        {
-            id: 'c2',
-            type: 'todo',
-            title: 'Small things you can knock out',
-            content: [
-                'Reply to Alex',
-                'Book slot for Dentist',
-                'Pay electricity bill'
-            ],
-            actions: [
-                { label: 'Done', action: 'done', variant: 'primary' }
-            ]
-        },
-        {
-            id: 'c3',
-            type: 'reflection',
-            title: 'Reflection',
-            content: 'You’ve been thinking about the "Timeline" feature for 3 days. What’s the real blocker?',
-            actions: [
-                { label: 'Answer', action: 'open_capture', variant: 'primary' }
-            ]
-        },
-        {
-            id: 'c4',
-            type: 'habit',
-            title: 'Daily Reading',
-            content: 'You usually read around this time.',
-            actions: [
-                { label: 'Done', action: 'done', variant: 'primary' },
-                { label: 'Skip', action: 'skip', variant: 'secondary' }
-            ]
-        },
-        {
-            id: 'c5',
-            type: 'goal',
-            title: 'Long-term Goal Check',
-            content: 'You said your long-term goal is to learn Spanish. Today’s notes mostly revolve around coding. Is that intentional?',
-            actions: [
-                { label: 'Yes', action: 'done', variant: 'secondary' },
-                { label: 'Log Spanish time', action: 'open_capture', variant: 'primary' }
-            ]
-        }
-    ];
+/**
+ * Map FeedItemRendered to DynamicCardData
+ */
+function mapFeedItemToCard(item: {
+    id: string;
+    phrasing: string;
+    supporting_note?: string;
+    suggested_actions: Array<{ action: string; label: string }>;
+}): DynamicCardData {
+    // Determine card type from feed item (we'll infer from phrasing or use a default)
+    // For now, we'll use a simple heuristic or default to 'focus'
+    let cardType: DynamicCardData['type'] = 'focus';
+    
+    // Try to infer from phrasing
+    const phrasingLower = item.phrasing.toLowerCase();
+    if (phrasingLower.includes('task') || phrasingLower.includes('todo')) {
+        cardType = 'todo';
+    } else if (phrasingLower.includes('commitment') || phrasingLower.includes('committed')) {
+        cardType = 'goal';
+    } else if (phrasingLower.includes('habit')) {
+        cardType = 'habit';
+    } else if (phrasingLower.includes('reflection') || phrasingLower.includes('thinking')) {
+        cardType = 'reflection';
+    }
 
-    return { data: cards };
+    // Map actions
+    const actions: CardAction[] = item.suggested_actions.map(sa => ({
+        label: sa.label,
+        action: sa.action as CardAction['action'],
+        variant: sa.action === 'start' || sa.action === 'done' ? 'primary' : 'secondary'
+    }));
+
+    // Determine content format
+    // If phrasing contains multiple items (like a todo list), split it
+    const content: string | string[] = item.phrasing;
+
+    return {
+        id: item.id,
+        type: cardType,
+        title: cardType === 'todo' ? 'Tasks' : cardType === 'goal' ? 'Commitment' : cardType === 'habit' ? 'Habit' : cardType === 'reflection' ? 'Reflection' : 'Focus',
+        content,
+        actions
+    };
+}
+
+export function useDynamicCards() {
+    const { data: feedItems, isLoading, error } = trpc.feed.getCurrent.useQuery();
+
+    const cards = React.useMemo(() => {
+        if (isLoading) {
+            return [];
+        }
+
+        if (error || !feedItems || (Array.isArray(feedItems) && feedItems.length === 0)) {
+            // Return empty array if no feed items
+            return [];
+        }
+
+        // Map feed items to cards
+        return feedItems.map(mapFeedItemToCard);
+    }, [feedItems, isLoading, error]);
+
+    return { data: cards, isLoading };
 }

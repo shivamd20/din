@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useDynamicCards, type DynamicCardData } from '../../hooks/use-home-data';
 import { FocusCard, TodoLiteCard, ReflectionCard, HabitCard, GoalCard } from './DynamicCards';
 
 export function DynamicCardsZone() {
-    const { data: initialCards } = useDynamicCards();
-    const [cards, setCards] = useState(initialCards);
+    const { data: cards, isLoading } = useDynamicCards();
+    const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+
+    // Filter out dismissed cards
+    const visibleCards = useMemo(() => {
+        if (!cards || cards.length === 0) return [];
+        return cards.filter(card => !dismissedIds.has(card.id)).slice(0, 3);
+    }, [cards, dismissedIds]);
 
     const handleDismiss = (id: string) => {
-        // Animate out (handled by parent re-render or animation library if we had one, for now just state filter)
-        setCards(prev => prev.filter(c => c.id !== id));
+        setDismissedIds(prev => new Set([...prev, id]));
     };
 
     const handleAction = (action: string, id: string) => {
@@ -19,10 +24,21 @@ export function DynamicCardsZone() {
         // 'open_capture' would likely need to bubble up or use a context to focus the input
     };
 
-    if (cards.length === 0) return null;
+    if (isLoading) {
+        return (
+            <div className="text-center py-8 text-zinc-400 text-sm">
+                Loading feed...
+            </div>
+        );
+    }
 
-    // Max 3 cards
-    const visibleCards = cards.slice(0, 3);
+    if (visibleCards.length === 0) {
+        return (
+            <div className="text-center py-8 text-zinc-400 text-sm">
+                No feed items available. Create a capture to generate your feed.
+            </div>
+        );
+    }
 
     return (
         <div className="w-full px-4 mb-20 space-y-3">

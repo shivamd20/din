@@ -42,33 +42,13 @@ export class AIModel {
     /**
      * Get the appropriate adapter (mock or real)
      */
-    private getAdapter(modelId?: string): AnyTextAdapter {
+    getAdapter(modelId?: string): AnyTextAdapter {
         if (this.useMock) {
+            // Use default responseGenerator from mock-adapter which handles all cases
             return mockText({
                 delay: 100,
                 chunkDelay: 30,
                 debug: this.env.USE_MOCK_ADAPTER_DEBUG === 'true',
-                responseGenerator: (messages) => {
-                    const lastUserMessage = messages
-                        .filter((m) => m.role === 'user')
-                        .slice(-1)[0];
-                    
-                    if (lastUserMessage?.content.toLowerCase().includes('extract') || 
-                        lastUserMessage?.content.toLowerCase().includes('signal')) {
-                        // Return mock structured data for signal extraction
-                        return JSON.stringify({
-                            actionability: 0.5,
-                            temporal_proximity: 0.5,
-                            consequence_strength: 0.5,
-                            external_coupling: 0.5,
-                            scope_shortness: 0.5,
-                            habit_likelihood: 0.5,
-                            tone_stress: 0.5,
-                        });
-                    }
-                    
-                    return "I'm here to help. What would you like to discuss?";
-                },
             })('mock-model');
         }
 

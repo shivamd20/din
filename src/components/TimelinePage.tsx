@@ -2,10 +2,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
 import { ExpandableMarkdown } from "./ExpandableMarkdown";
 import { cn } from "@/lib/utils";
-import { ImageOff, FileText, Loader2 } from "lucide-react";
+import { ImageOff, FileText, Loader2, Sparkles } from "lucide-react";
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function TimelinePage() {
+    const navigate = useNavigate();
     const entries = useLiveQuery(() =>
         db.entries.orderBy('created_at').reverse().limit(100).toArray()
     );
@@ -74,6 +76,17 @@ export default function TimelinePage() {
 
     return (
         <div className="h-full w-full bg-white overflow-y-auto overscroll-y-contain pb-32">
+            {/* Navigation Button to Signals */}
+            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-zinc-100/50 px-6 py-3 flex justify-end">
+                <button
+                    onClick={() => navigate('/signals')}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-lg transition-colors"
+                >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Signals & Commitments</span>
+                </button>
+            </div>
+
             {entries.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center text-center px-8 opacity-0 animate-in fade-in duration-700">
                     <div className="w-20 h-20 bg-zinc-50 rounded-3xl flex items-center justify-center mb-6 shadow-inner ring-1 ring-zinc-100">

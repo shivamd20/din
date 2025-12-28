@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
 import TimelinePage from './components/TimelinePage';
+import SignalsPage from './components/SignalsPage';
 import ReflectChat from './components/ReflectChat';
 import { Header } from './components/layout/Header';
 import { GuestBanner } from './components/layout/GuestBanner';
@@ -99,6 +100,7 @@ export default function App() {
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/timeline" element={<TimelinePage />} />
+              <Route path="/signals" element={<SignalsPage />} />
               <Route path="/reflect" element={<ReflectChat />} />
             </Route>
           </Routes>

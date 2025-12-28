@@ -13,9 +13,18 @@
 	"migrations": [
 		{
 			"new_sqlite_classes": [
-				"UserTimelineDO"
+				"UserTimelineDO",
+				"UserSignalsDO",
+				"UserCommitmentsDO",
+				"UserTasksDO"
 			],
-			"tag": "v2"
+			"tag": "v3"
+		},
+		{
+			"new_sqlite_classes": [
+				"UserFeedDO"
+			],
+			"tag": "v4"
 		}
 	],
 	"assets": {
@@ -30,12 +39,40 @@
 			{
 				"class_name": "UserTimelineDO",
 				"name": "USER_TIMELINE_DO"
+			},
+			{
+				"class_name": "UserSignalsDO",
+				"name": "USER_SIGNALS_DO"
+			},
+			{
+				"class_name": "UserCommitmentsDO",
+				"name": "USER_COMMITMENTS_DO"
+			},
+			{
+				"class_name": "UserTasksDO",
+				"name": "USER_TASKS_DO"
+			},
+			{
+				"class_name": "UserFeedDO",
+				"name": "USER_FEED_DO"
 			}
 		]
 	},
 	"ai": {
 		"binding": "AI"
 	},
+	"workflows": [
+		{
+			"name": "SignalsWorkflow",
+			"binding": "SIGNALS_WORKFLOW",
+			"class_name": "SignalsWorkflow"
+		},
+		{
+			"name": "FeedWorkflow",
+			"binding": "FEED_WORKFLOW",
+			"class_name": "FeedWorkflow"
+		}
+	],
 	"d1_databases": [
 		{
 			"binding": "liva_db",

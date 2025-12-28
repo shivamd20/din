@@ -20,15 +20,18 @@ export default {
 		 })
 
 
-		 if(request.url.startsWith("/api/anthropic")){
-			const key = await env.ANTHROPIC_API_KEY.get();
-			return new Response(key ?? "missing");
-		 }
+	
 
 
 		const url = new URL(request.url);
 
+		if(url.pathname.startsWith("/api/anthropic")){
+			const key = await env.ANTHROPIC_API_KEY.get();
+			return new Response(key ?? "missing");
+		 }
+
 		const auth = createAuth(env);
+		
 
 		if (url.pathname.startsWith("/api/auth")) {
 			return auth.handler(request);

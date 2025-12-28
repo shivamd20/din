@@ -200,21 +200,111 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
             // Try to extract feed items from the message
             let feedItems: Array<{ id: string; type: string; description: string; suggested_actions: string[] }> = [];
             try {
-                // Look for JSON in the message
-                const jsonMatch = lastUserMessage.content.match(/\[[\s\S]*\]/);
-                if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    if (Array.isArray(parsed)) {
-                        feedItems = parsed;
+                // Look for JSON array in the message - try multiple patterns
+                // Pattern 1: Look for "Feed items to phrase:" followed by JSON array (handle multi-line)
+                const feedItemsIndex = lastUserMessage.content.indexOf('Feed items to phrase');
+                if (feedItemsIndex !== -1) {
+                    // Find the opening bracket after "Feed items to phrase"
+                    const afterLabel = lastUserMessage.content.substring(feedItemsIndex);
+                    const bracketIndex = afterLabel.indexOf('[');
+                    if (bracketIndex !== -1) {
+                        // Extract from opening bracket and find matching closing bracket
+                        let bracketCount = 0;
+                        let endIndex = bracketIndex;
+                        for (let i = bracketIndex; i < afterLabel.length; i++) {
+                            if (afterLabel[i] === '[') bracketCount++;
+                            if (afterLabel[i] === ']') bracketCount--;
+                            if (bracketCount === 0) {
+                                endIndex = i + 1;
+                                break;
+                            }
+                        }
+                        if (bracketCount === 0) {
+                            const jsonStr = afterLabel.substring(bracketIndex, endIndex);
+                            const parsed = JSON.parse(jsonStr);
+                            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.id) {
+                                feedItems = parsed;
+                            }
+                        }
                     }
                 }
-            } catch {
-                // If parsing fails, create mock items
-                feedItems = [
-                    { id: 'task-1', type: 'task', description: 'Complete important task', suggested_actions: ['complete', 'snooze'] },
-                    { id: 'commitment-1', type: 'commitment', description: 'Follow through on commitment', suggested_actions: ['acknowledge', 'skip'] },
-                    { id: 'reminder-1', type: 'reminder', description: 'Actionable reminder', suggested_actions: ['start', 'snooze'] }
-                ];
+                
+                // Pattern 2: If not found, look for any JSON array with objects that have 'id' fields
+                if (feedItems.length === 0) {
+                    // Find all potential JSON arrays
+                    let bracketIndex = lastUserMessage.content.indexOf('[');
+                    while (bracketIndex !== -1 && feedItems.length === 0) {
+                        let bracketCount = 0;
+                        let endIndex = bracketIndex;
+                        for (let i = bracketIndex; i < lastUserMessage.content.length; i++) {
+                            if (lastUserMessage.content[i] === '[') bracketCount++;
+                            if (lastUserMessage.content[i] === ']') bracketCount--;
+                            if (bracketCount === 0) {
+                                endIndex = i + 1;
+                                break;
+                            }
+                        }
+                        if (bracketCount === 0) {
+                            try {
+                                const jsonStr = lastUserMessage.content.substring(bracketIndex, endIndex);
+                                const parsed = JSON.parse(jsonStr);
+                                if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.id) {
+                                    feedItems = parsed;
+                                    break;
+                                }
+                            } catch {
+                                // Try next bracket
+                            }
+                        }
+                        bracketIndex = lastUserMessage.content.indexOf('[', bracketIndex + 1);
+                    }
+                }
+                
+                if (feedItems.length === 0) {
+                    throw new Error('No valid feed items found');
+                }
+            } catch (error) {
+                if (this.mockConfig.debug) {
+                    console.log('[MockAdapter] Failed to parse feed items from message, attempting fallback extraction:', error);
+                }
+                // Try a more aggressive extraction - look for the items array anywhere
+                try {
+                    // Look for the items array in the JSON structure
+                    const itemsMatch = lastUserMessage.content.match(/"items"\s*:\s*(\[[\s\S]*?\])/);
+                    if (itemsMatch) {
+                        const parsed = JSON.parse(itemsMatch[1]);
+                        if (Array.isArray(parsed)) {
+                            feedItems = parsed;
+                        }
+                    }
+                } catch {
+                    // Last resort: try to find any array with objects that have 'id' fields
+                    const arrayMatches = lastUserMessage.content.matchAll(/\[([\s\S]*?)\]/g);
+                    for (const match of arrayMatches) {
+                        try {
+                            const parsed = JSON.parse(match[0]);
+                            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.id) {
+                                feedItems = parsed;
+                                break;
+                            }
+                        } catch {
+                            continue;
+                        }
+                    }
+                }
+                
+                // If still no items found, we can't proceed - this should not happen
+                if (feedItems.length === 0) {
+                    if (this.mockConfig.debug) {
+                        console.error('[MockAdapter] Could not extract feed items from message');
+                    }
+                    // Return empty array - the validation will catch this
+                    return JSON.stringify({ items: [] });
+                }
+            }
+
+            if (this.mockConfig.debug) {
+                console.log('[MockAdapter] Extracted feed items:', feedItems.map(item => ({ id: item.id, type: item.type })));
             }
 
             // Generate phrased feed items

@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PenTool, Clock, Sparkles } from 'lucide-react';
+import { Home, MessageSquare, CheckSquare2, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function BottomNav() {
@@ -7,16 +7,17 @@ export function BottomNav() {
     const location = useLocation();
 
     const tabs = [
-        { name: 'Capture', path: '/', icon: PenTool },
-        { name: 'Timeline', path: '/timeline', icon: Clock },
-        { name: 'Reflect', path: '/reflect', icon: Sparkles },
+        { name: 'Feed', path: '/', icon: Home },
+        { name: 'Chat', path: '/chat', icon: MessageSquare },
+        { name: 'Tasks', path: '/tasks', icon: CheckSquare2 },
+        { name: 'Commitments', path: '/commitments', icon: Target },
     ];
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-t border-zinc-100 pb-safe">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-zinc-100/80 shadow-[0_-2px_20px_-8px_rgba(0,0,0,0.08)] pb-safe">
             <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
                 {tabs.map((tab) => {
-                    const isActive = location.pathname === tab.path;
+                    const isActive = location.pathname === tab.path || (tab.path === '/' && location.pathname === '/');
                     const Icon = tab.icon;
 
                     return (
@@ -24,17 +25,17 @@ export function BottomNav() {
                             key={tab.name}
                             onClick={() => navigate(tab.path)}
                             className={cn(
-                                "flex flex-col items-center justify-center w-full h-full space-y-1 transition-all duration-200 active:scale-95",
-                                isActive ? "text-zinc-900" : "text-zinc-400 hover:text-zinc-600"
+                                "flex flex-col items-center justify-center w-full h-full space-y-0.5 transition-all duration-200 active:scale-95",
+                                isActive ? "text-zinc-900" : "text-zinc-400"
                             )}
                         >
                             <div className={cn(
-                                "p-1.5 rounded-xl transition-all",
-                                isActive && "bg-zinc-100"
+                                "p-2 rounded-xl transition-all duration-200",
+                                isActive && "bg-zinc-100/80"
                             )}>
                                 <Icon
                                     className={cn(
-                                        "w-6 h-6",
+                                        "w-5 h-5 transition-all",
                                         isActive ? "stroke-[2.5px]" : "stroke-2"
                                     )}
                                 />

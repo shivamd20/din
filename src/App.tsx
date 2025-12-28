@@ -85,6 +85,8 @@ function ProtectedLayout() {
 
 import HomePage from './components/HomePage';
 import AuthCallbackHandler from './components/AuthCallbackHandler';
+import TasksPage from './components/TasksPage';
+import CommitmentsPage from './components/CommitmentsPage';
 
 export default function App() {
   return (
@@ -96,9 +98,12 @@ export default function App() {
             <Route path="/api/auth/callback/*" element={<AuthCallbackHandler />} />
             <Route element={<ProtectedLayout />}>
               <Route path="/" element={<HomePage />} />
+              <Route path="/chat" element={<ReflectChat />} />
+              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/commitments" element={<CommitmentsPage />} />
+              {/* Hidden behind hamburger menu */}
               <Route path="/timeline" element={<TimelinePage />} />
               <Route path="/signals" element={<SignalsPage />} />
-              <Route path="/reflect" element={<ReflectChat />} />
             </Route>
           </Routes>
         </BrowserRouter>

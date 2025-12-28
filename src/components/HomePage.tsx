@@ -27,8 +27,8 @@ export default function HomePage() {
                 </div>
             ) : (
                 <>
-                    {/* 1. Capture Zone (Dominant) */}
-                    <div className="shrink-0 z-20 bg-white relative pt-4">
+                    {/* 1. Capture Zone (Dominant - First thing when app opens) */}
+                    <div className="shrink-0 z-20 bg-white relative pt-6 pb-4">
                         <CaptureZone onCapture={handleCapture} />
                     </div>
 
@@ -37,11 +37,10 @@ export default function HomePage() {
                         <ContextStrip />
                     </div>
 
-                    {/* 3. Dynamic Cards Zone (Scrollable content below) */}
-                    {/* bg-[#F5F5F7] is the Apple System Gray 6 (light mode background) */}
-                    <div className="flex-1 w-full bg-[#FAFAFA] pt-8 pb-32 min-h-[80vh] border-t border-zinc-50 relative">
-                        {/* Decorative gradient fade at top of list */}
-                        <div className="absolute top-0 left-0 w-full h-6 bg-gradient-to-b from-black/[0.02] to-transparent pointer-events-none" />
+                    {/* 3. Feed Cards Zone (Scrollable, limited visible) */}
+                    <div className="flex-1 w-full bg-zinc-50/30 pt-6 pb-32 min-h-[60vh] border-t border-zinc-100/50 relative">
+                        {/* Subtle gradient fade at top */}
+                        <div className="absolute top-0 left-0 w-full h-8 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
                         <DynamicCardsZone />
                     </div>
                 </>

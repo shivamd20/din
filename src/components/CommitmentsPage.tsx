@@ -1,0 +1,141 @@
+import { trpc } from '../lib/trpc';
+import { format } from 'date-fns';
+import { Target, Loader2, Pause, Settings, Eye, HelpCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useState } from 'react';
+
+export default function CommitmentsPage() {
+    const { data: commitments, isLoading } = trpc.commitments.list.useQuery({
+        status: undefined,
+        include_history: false,
+    });
+    const [explainedId, setExplainedId] = useState<string | null>(null);
+
+    // Filter for only accepted/active commitments
+    const activeCommitments = commitments?.filter(
+        c => c.status === 'active' || c.status === 'acknowledged'
+    ) || [];
+
+    if (isLoading) {
+        return (
+            <div className="h-full w-full flex items-center justify-center bg-white">
+                <Loader2 className="w-6 h-6 text-zinc-300 animate-spin" />
+            </div>
+        );
+    }
+
+    if (activeCommitments.length === 0) {
+        return (
+            <div className="h-full w-full bg-white overflow-y-auto overscroll-y-contain pb-32 flex flex-col items-center justify-center text-center px-8">
+                <div className="w-20 h-20 bg-zinc-50 rounded-3xl flex items-center justify-center mb-6 shadow-sm ring-1 ring-zinc-100">
+                    <Target className="w-8 h-8 text-zinc-300" />
+                </div>
+                <p className="text-zinc-900 font-medium tracking-tight text-lg">No active commitments</p>
+                <p className="text-zinc-400 text-sm mt-2 max-w-xs leading-relaxed">
+                    Commitments you accept will appear here.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-full w-full bg-white overflow-y-auto overscroll-y-contain pb-32">
+            <div className="max-w-xl mx-auto px-6 py-6 space-y-4">
+                {activeCommitments.map((commitment) => {
+                    // Calculate progress (simplified - you may want to track actual progress)
+                    const progress = commitment.status === 'active' ? 0.65 : 0.45; // Placeholder
+                    const frequency = commitment.horizon || 'weekly';
+                    const strength = commitment.strength || 'medium';
+
+                    return (
+                        <div
+                            key={commitment.id}
+                            className="group relative p-5 rounded-2xl bg-white border border-zinc-200/80 shadow-sm hover:shadow-md transition-all"
+                        >
+                            {/* Header */}
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h3 className="text-[16px] font-semibold text-zinc-900 tracking-tight">
+                                            {commitment.content || `${strength} commitment`}
+                                        </h3>
+                                        <button
+                                            onClick={() => setExplainedId(explainedId === commitment.id ? null : commitment.id)}
+                                            className="opacity-0 group-hover:opacity-40 hover:opacity-100 text-zinc-400 hover:text-zinc-600 transition-opacity"
+                                            aria-label="Why am I seeing this?"
+                                        >
+                                            <HelpCircle className="w-4 h-4" />
+                                        </button>
+                                    </div>
+
+                                    {/* Explanation (shown when help icon clicked) */}
+                                    {explainedId === commitment.id && (
+                                        <div className="mt-2 p-3 bg-zinc-50 rounded-xl border border-zinc-100 text-sm text-zinc-600 leading-relaxed">
+                                            This commitment was created from your entries. It reflects a pattern you've been working on.
+                                        </div>
+                                    )}
+
+                                    {/* Frequency Badge */}
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <span className="px-2.5 py-1 bg-zinc-100 text-zinc-700 rounded-full text-xs font-medium capitalize">
+                                            {frequency}
+                                        </span>
+                                        <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium capitalize">
+                                            {strength}
+                                        </span>
+                                        <span className={cn(
+                                            "px-2.5 py-1 rounded-full text-xs font-medium",
+                                            commitment.status === 'active'
+                                                ? "bg-emerald-50 text-emerald-700"
+                                                : "bg-amber-50 text-amber-700"
+                                        )}>
+                                            {commitment.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs text-zinc-500 font-medium">Progress</span>
+                                    <span className="text-xs text-zinc-400">{Math.round(progress * 100)}%</span>
+                                </div>
+                                <div className="h-2 bg-zinc-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-zinc-900 rounded-full transition-all duration-500"
+                                        style={{ width: `${progress * 100}%` }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2 pt-2 border-t border-zinc-100">
+                                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors">
+                                    <Pause className="w-4 h-4" />
+                                    <span>Pause</span>
+                                </button>
+                                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors">
+                                    <Settings className="w-4 h-4" />
+                                    <span>Adjust</span>
+                                </button>
+                                <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors ml-auto">
+                                    <Eye className="w-4 h-4" />
+                                    <span>Review</span>
+                                </button>
+                            </div>
+
+                            {/* Metadata */}
+                            <div className="mt-3 pt-3 border-t border-zinc-50 flex items-center gap-3 text-xs text-zinc-400">
+                                <span>v{commitment.version}</span>
+                                <span>•</span>
+                                <span>{format(new Date(commitment.created_at), 'MMM d, yyyy')}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+

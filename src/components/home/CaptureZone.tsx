@@ -101,9 +101,9 @@ export function CaptureZone({ onCapture }: CaptureZoneProps) {
     };
 
     return (
-        <div className="flex flex-col w-full bg-white relative pt-8 pb-4 transition-all duration-300 ease-in-out font-sans group">
+        <div className="flex flex-col w-full bg-white relative pt-2 pb-4 transition-all duration-300 ease-in-out font-sans group">
 
-            {/* Plain Textarea - Apple-like typography */}
+            {/* Plain Textarea - Clean, focused typography */}
             <div className="px-6 relative">
                 <textarea
                     ref={textareaRef}
@@ -111,26 +111,27 @@ export function CaptureZone({ onCapture }: CaptureZoneProps) {
                     onChange={(e) => setText(e.target.value)}
                     placeholder={placeholder}
                     rows={1}
-                    className="w-full bg-transparent text-xl leading-relaxed text-zinc-900 placeholder:text-zinc-300 resize-none outline-none font-medium tracking-tight py-2 min-h-[60px] max-h-[60vh] overflow-y-auto"
+                    className="w-full bg-transparent text-xl leading-relaxed text-zinc-900 placeholder:text-zinc-400 resize-none outline-none font-medium tracking-tight py-3 min-h-[64px] max-h-[60vh] overflow-y-auto"
                     style={{ fontFeatureSettings: '"kern"', WebkitFontSmoothing: 'antialiased' }}
                 />
             </div>
 
-            {/* Attachments Preview - Refined */}
+            {/* Attachments Preview - Clean */}
             {attachments.length > 0 && (
-                <div className="flex gap-3 overflow-x-auto px-6 py-4 scrollbar-hide">
+                <div className="flex gap-2 overflow-x-auto px-6 py-3 scrollbar-hide">
                     {attachments.map((att) => (
-                        <div key={att.id} className="w-16 h-16 shrink-0 relative rounded-xl overflow-hidden border border-zinc-100 shadow-sm group/att bg-zinc-50">
+                        <div key={att.id} className="w-16 h-16 shrink-0 relative rounded-xl overflow-hidden border border-zinc-200/80 shadow-sm group/att bg-zinc-50">
                             {att.type === 'image' && att.blob ? (
-                                <img src={URL.createObjectURL(att.blob)} className="w-full h-full object-cover opacity-90 transition-opacity group-hover/att:opacity-100" />
+                                <img src={URL.createObjectURL(att.blob)} className="w-full h-full object-cover" />
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center text-[9px] text-zinc-400 font-medium tracking-wide break-all p-1 text-center leading-tight">
+                                <div className="w-full h-full flex items-center justify-center text-[9px] text-zinc-500 font-medium tracking-wide break-all p-1 text-center leading-tight">
                                     {att.name}
                                 </div>
                             )}
                             <button
                                 onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
-                                className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 backdrop-blur-sm text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover/att:opacity-100 transition-all hover:bg-black/80"
+                                className="absolute top-1 right-1 w-5 h-5 bg-zinc-900/80 backdrop-blur-sm text-white rounded-lg flex items-center justify-center text-xs opacity-0 group-hover/att:opacity-100 transition-all hover:bg-zinc-900"
+                                aria-label="Remove attachment"
                             >
                                 <X className="w-3 h-3" />
                             </button>
@@ -139,18 +140,20 @@ export function CaptureZone({ onCapture }: CaptureZoneProps) {
                 </div>
             )}
 
-            {/* Controls Row - Minimalist, fades in when needed or hovered */}
-            <div className="flex items-center justify-between px-6 mt-2 opacity-100 transition-opacity duration-300">
-                <div className="flex items-center gap-2 -ml-2">
+            {/* Controls Row - Minimalist, clean */}
+            <div className="flex items-center justify-between px-6 mt-1 opacity-100 transition-opacity duration-300">
+                <div className="flex items-center gap-1 -ml-2">
                     <button
                         onClick={() => imageInputRef.current?.click()}
-                        className="p-2 rounded-full text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 transition-all duration-200 active:scale-95"
+                        className="p-2 rounded-xl text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 transition-all duration-200 active:scale-95"
+                        aria-label="Add image"
                     >
                         <Image className="w-5 h-5 stroke-[1.5]" />
                     </button>
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="p-2 rounded-full text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 transition-all duration-200 active:scale-95"
+                        className="p-2 rounded-xl text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 transition-all duration-200 active:scale-95"
+                        aria-label="Add file"
                     >
                         <Paperclip className="w-5 h-5 stroke-[1.5]" />
                     </button>
@@ -158,17 +161,18 @@ export function CaptureZone({ onCapture }: CaptureZoneProps) {
                     <input type="file" ref={fileInputRef} className="hidden" multiple onChange={(e) => handleFileSelect(e, 'file')} />
                 </div>
 
-                <div className="flex items-center gap-4">
-                    {/* Microcopy only shows when empty to encourage, or hidden when typing to focus */}
+                <div className="flex items-center gap-3">
+                    {/* Microcopy only shows when empty to encourage */}
                     {!text && attachments.length === 0 && (
-                        <span className="text-[13px] text-zinc-300 font-medium tracking-wide">
+                        <span className="text-[12px] text-zinc-400 font-medium tracking-wide">
                             Saved instantly
                         </span>
                     )}
                     <button
                         onClick={handleSubmit}
                         disabled={!text.trim() && attachments.length === 0}
-                        className="bg-black text-white rounded-full w-10 h-10 flex items-center justify-center disabled:opacity-0 disabled:translate-y-2 transition-all duration-300 active:scale-90 shadow-md shadow-zinc-200 hover:shadow-lg hover:shadow-zinc-300 hover:-translate-y-0.5"
+                        className="bg-zinc-900 text-white rounded-xl w-10 h-10 flex items-center justify-center disabled:opacity-0 disabled:translate-y-2 transition-all duration-300 active:scale-95 shadow-sm hover:shadow-md hover:bg-zinc-800"
+                        aria-label="Submit"
                     >
                         <ArrowUp className="w-5 h-5 stroke-[2.5]" />
                     </button>

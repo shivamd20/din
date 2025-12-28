@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
-import { UserCircle, RefreshCcw, LogOut } from 'lucide-react';
+import { UserCircle, RefreshCcw, LogOut, Menu, Clock, Sparkles } from 'lucide-react';
 import { type Session, signOut, signIn } from '@/lib/auth-client';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { db } from '@/lib/db';
@@ -29,21 +30,65 @@ export function Header({ user }: HeaderProps) {
     };
 
     return (
-        <header className="fixed top-0 left-0 right-0 h-14 z-40 bg-white/80 backdrop-blur-md border-b border-zinc-100 flex items-center justify-between px-4 max-w-lg mx-auto">
+        <header className="fixed top-0 left-0 right-0 h-14 z-40 bg-white/95 backdrop-blur-xl border-b border-zinc-100/80 shadow-[0_2px_20px_-8px_rgba(0,0,0,0.08)] flex items-center justify-between px-4 max-w-lg mx-auto">
             {/* Brand / Title */}
             <div className="flex items-center gap-2">
                 <span className="text-lg font-bold text-zinc-900 tracking-tight">din</span>
-                <span className="text-xs text-zinc-400 font-medium px-2 py-0.5 bg-zinc-100 rounded-full">v2</span>
+                <span className="text-xs text-zinc-400 font-medium px-2 py-0.5 bg-zinc-100/80 rounded-full">v2</span>
             </div>
 
-            {/* Profile Action */}
-            <div className="flex items-center">
+            {/* Right side: Hamburger Menu + Profile */}
+            <div className="flex items-center gap-2">
+                {/* Hamburger Menu */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button className="p-2 rounded-lg text-zinc-600 hover:bg-zinc-100/80 hover:text-zinc-900 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-zinc-200">
+                            <Menu className="w-5 h-5" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56 mt-2">
+                        <DropdownMenuItem
+                            onClick={() => navigate('/timeline')}
+                            className="cursor-pointer"
+                        >
+                            <Clock className="mr-2 h-4 w-4" />
+                            <span>Timeline</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => navigate('/signals')}
+                            className="cursor-pointer"
+                        >
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            <span>Signals</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            onClick={() => signIn.social({
+                                provider: 'google',
+                                callbackURL: '/'
+                            })}
+                            className="cursor-pointer"
+                        >
+                            <RefreshCcw className="mr-2 h-4 w-4" />
+                            <span>Switch Account</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={handleLogout}
+                            className="cursor-pointer text-zinc-600 focus:text-zinc-600 focus:bg-zinc-50"
+                        >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            <span>Logout</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Profile Avatar */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className="rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-zinc-200 transition-all active:scale-95">
-                            <Avatar className="h-8 w-8 border border-zinc-200">
+                            <Avatar className="h-8 w-8 border border-zinc-200/80">
                                 <AvatarImage src={user.image || undefined} alt={user.name} />
-                                <AvatarFallback className="bg-zinc-100 text-zinc-500">
+                                <AvatarFallback className="bg-zinc-100/80 text-zinc-500">
                                     <UserCircle className="w-5 h-5" />
                                 </AvatarFallback>
                             </Avatar>
@@ -62,7 +107,7 @@ export function Header({ user }: HeaderProps) {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             onClick={handleLogout}
-                            className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                            className="cursor-pointer text-zinc-600 focus:text-zinc-600 focus:bg-zinc-50"
                         >
                             <LogOut className="mr-2 h-4 w-4" />
                             <span>Logout</span>

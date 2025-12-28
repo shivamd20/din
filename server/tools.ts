@@ -30,8 +30,8 @@ const logToTimelineDef = toolDefinition({
 
 export const createTools = (userTimeline: DurableObjectStub<UserTimelineDO>, userId: string) => {
     return [
-        getRecentLogsDef.server(async (args: z.infer<typeof getRecentLogsParameters>) => {
-            const { limit } = args;
+        getRecentLogsDef.server(async (args: { limit?: number }) => {
+            const limit = args.limit ?? 20;
             const logs = await userTimeline.getRecentEntries(limit);
             // Clean logs to remove any non-serializable properties from SQLite result
             return logs.map((l) => ({ ...l }));

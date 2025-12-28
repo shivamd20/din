@@ -54,7 +54,8 @@ export class AIModel {
 
         const id = modelId || DEFAULT_MODEL_ID;
         const model = this.getModelId(id);
-        return geminiText(model, { apiKey: this.apiKey });
+        // Type assertion needed due to TanStack AI type system complexity
+        return geminiText(model, { apiKey: this.apiKey }) as AnyTextAdapter;
     }
 
     /**

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
-import { useSession, signIn, type Session } from './lib/auth-client';
+import { useSession, type Session } from './lib/auth-client';
 import { syncQueue, pullFromServer } from './lib/sync';
 import { trpcClient, queryClient, trpc } from './lib/trpc';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import TimelinePage from './components/TimelinePage';
 import SignalsPage from './components/SignalsPage';
 import ReflectChat from './components/ReflectChat';
 import { Header } from './components/layout/Header';
-
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { BottomNav } from './components/layout/BottomNav';
 
 function ProtectedLayout() {
@@ -30,41 +30,36 @@ function ProtectedLayout() {
   }, [session]);
 
   useEffect(() => {
-    // Initial sync on load if online
-    syncQueue();
-    pullFromServer();
-  }, []);
+    // Initial sync on load if online and authenticated
+    if (session || cachedSession) {
+      syncQueue();
+      pullFromServer();
+    }
+  }, [session, cachedSession]);
 
   // Use cached session if real session fails (offline) or is pending but we have cache
   const effectiveSession = session || (error ? cachedSession : null) || (isPending ? cachedSession : null);
 
-  const [isSigningIn, setIsSigningIn] = useState(false);
-
-  // Implicit Anonymous Login
-  useEffect(() => {
-    if (!isPending && !effectiveSession?.user && !isSigningIn) {
-      setIsSigningIn(true); // Prevent double-firing
-      signIn.anonymous()
-        .then((res) => {
-          // Optional: force re-fetch if better-auth doesn't auto-update
-          // session.update() 
-        })
-        .catch((e) => {
-          console.error("Anonymous login failed", e);
-        })
-        .finally(() => {
-          setIsSigningIn(false);
-        });
-    }
-  }, [isPending, effectiveSession?.user, isSigningIn]);
-
-  if (isPending && !cachedSession) {
-    return <div className="flex h-screen w-screen items-center justify-center bg-gray-50/50 backdrop-blur-sm text-zinc-400">Loading...</div>;
+  // Show welcome screen if not authenticated
+  if (!isPending && !effectiveSession?.user) {
+    return <WelcomeScreen />;
   }
 
-  // If we are still waiting for implicit login to complete
+  // Show loading state only while checking auth
+  if (isPending && !cachedSession) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-white text-zinc-400">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-zinc-200 border-t-zinc-900 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If still no session after loading, show welcome
   if (!effectiveSession?.user) {
-    return <div className="flex h-screen w-screen items-center justify-center bg-gray-50/50 backdrop-blur-sm text-zinc-400">Initializing...</div>;
+    return <WelcomeScreen />;
   }
 
   const user = effectiveSession.user;

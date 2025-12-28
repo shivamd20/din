@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { trpc } from '../lib/trpc';
 import { format, isToday, startOfDay } from 'date-fns';
-import { CheckCircle2, Circle, Loader2, GripVertical } from 'lucide-react';
+import { CheckCircle2, CheckSquare2, Circle, Loader2, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type FilterType = 'today' | 'upcoming' | 'completed' | 'all';
@@ -14,15 +14,24 @@ export default function TasksPage() {
 
     // Filter and group tasks
     const filteredTasks = useMemo(() => {
-        if (!tasks) return { today: [], upcoming: [], completed: [], all: [] };
+        type Task = NonNullable<typeof tasks>[number];
+        
+        if (!tasks) {
+            return { 
+                today: [] as Task[], 
+                upcoming: [] as Task[], 
+                completed: [] as Task[], 
+                all: [] as Task[] 
+            };
+        }
 
         const now = Date.now();
         const todayStart = startOfDay(new Date()).getTime();
 
         const grouped = {
-            today: [] as typeof tasks,
-            upcoming: [] as typeof tasks,
-            completed: [] as typeof tasks,
+            today: [] as Task[],
+            upcoming: [] as Task[],
+            completed: [] as Task[],
             all: tasks,
         };
 

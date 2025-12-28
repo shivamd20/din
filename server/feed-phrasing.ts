@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { chat } from '@tanstack/ai';
 import { AIModel } from './ai-model';
 import type { FeedItem } from './feed-generator';
-import type { FeedItemRendered } from './UserFeedDO';
+import type { FeedItemRendered } from './UserDO';
 
 const FeedItemRenderedSchema = z.object({
     id: z.string(),

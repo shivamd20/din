@@ -16,12 +16,12 @@ export async function handleChatRequest(request: Request, env: Env) {
         modelId?: string;
     };
 
-    // Get UserTimelineDO stub
-    const userTimeline = env.USER_TIMELINE_DO.get(
-        env.USER_TIMELINE_DO.idFromName(session.user.id)
+    // Get UserDO stub
+    const userDO = env.USER_DO.get(
+        env.USER_DO.idFromName(session.user.id)
     );
 
-    const tools = createTools(userTimeline, session.user.id);
+    const tools = createTools(userDO, session.user.id);
 
     const aiModel = new AIModel(env);
 

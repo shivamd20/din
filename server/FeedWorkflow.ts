@@ -1,20 +1,12 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
-import type { UserTimelineDO } from "./UserTimelineDO";
-import type { UserSignalsDO } from "./UserSignalsDO";
-import type { UserCommitmentsDO } from "./UserCommitmentsDO";
-import type { UserTasksDO } from "./UserTasksDO";
-import type { UserFeedDO } from "./UserFeedDO";
-import { buildCandidates, scoreItems, rankItems, prepareLLMRequest } from "./feed-generator";
+import type { UserDO } from "./UserDO";
+import { buildCandidates, scoreItems, rankItems } from "./feed-generator";
 import { phraseFeedItems } from "./feed-phrasing";
 
 export interface Env {
     GEMINI_API_KEY: string;
     AI: unknown;
-    USER_TIMELINE_DO: DurableObjectNamespace<UserTimelineDO>;
-    USER_SIGNALS_DO: DurableObjectNamespace<UserSignalsDO>;
-    USER_COMMITMENTS_DO: DurableObjectNamespace<UserCommitmentsDO>;
-    USER_TASKS_DO: DurableObjectNamespace<UserTasksDO>;
-    USER_FEED_DO: DurableObjectNamespace<UserFeedDO>;
+    USER_DO: DurableObjectNamespace<UserDO>;
 }
 
 export interface FeedWorkflowParams {
@@ -27,95 +19,50 @@ export interface FeedWorkflowParams {
  */
 export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
     async run(event: Readonly<WorkflowEvent<FeedWorkflowParams>>, step: WorkflowStep): Promise<void> {
-        const { userId, triggerCaptureId } = event.payload;
-        const startTime = Date.now();
+        const { userId } = event.payload;
         const currentTime = Date.now();
 
         try {
-            // Step 1: Fetch tasks (pending/in_progress)
+            // Step 1: Fetch tasks (pending/in_progress) using direct RPC
             const tasks = await step.do(
                 "fetch-tasks",
                 async () => {
-                    const tasksDO = this.env.USER_TASKS_DO.get(
-                        this.env.USER_TASKS_DO.idFromName(userId)
+                    const userDO = this.env.USER_DO.get(
+                        this.env.USER_DO.idFromName(userId)
                     );
-                    const response = await tasksDO.fetch(
-                        new Request("https://workflow/internal/get-tasks", {
-                            method: "POST",
-                            body: JSON.stringify({ userId }),
-                        })
-                    );
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Failed to fetch tasks: ${errorText}`);
-                    }
-                    const data = await response.json() as { tasks: Array<{
-                        id: string;
-                        content: string;
-                        status: string;
-                        priority?: string | null;
-                        due_date?: number | null;
-                        created_at: number;
-                    }> };
-                    return data.tasks;
+                    // Use direct RPC call instead of fetch()
+                    return await userDO.getTasks(userId, {
+                        include_history: false
+                    });
                 }
             );
 
-            // Step 2: Fetch commitments (active)
+            // Step 2: Fetch commitments (active) using direct RPC
             const commitments = await step.do(
                 "fetch-commitments",
                 async () => {
-                    const commitmentsDO = this.env.USER_COMMITMENTS_DO.get(
-                        this.env.USER_COMMITMENTS_DO.idFromName(userId)
+                    const userDO = this.env.USER_DO.get(
+                        this.env.USER_DO.idFromName(userId)
                     );
-                    const response = await commitmentsDO.fetch(
-                        new Request("https://workflow/internal/get-commitments", {
-                            method: "POST",
-                            body: JSON.stringify({ userId }),
-                        })
-                    );
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Failed to fetch commitments: ${errorText}`);
-                    }
-                    const data = await response.json() as { commitments: Array<{
-                        id: string;
-                        content: string;
-                        strength: string;
-                        horizon: string;
-                        status: string;
-                        created_at: number;
-                    }> };
-                    return data.commitments;
+                    // Use direct RPC call instead of fetch()
+                    return await userDO.getCommitments(userId, {
+                        include_history: false
+                    });
                 }
             );
 
-            // Step 3: Fetch recent signals
+            // Step 3: Fetch recent signals using direct RPC
             const signals = await step.do(
                 "fetch-signals",
                 async () => {
-                    const signalsDO = this.env.USER_SIGNALS_DO.get(
-                        this.env.USER_SIGNALS_DO.idFromName(userId)
+                    const userDO = this.env.USER_DO.get(
+                        this.env.USER_DO.idFromName(userId)
                     );
-                    const response = await signalsDO.fetch(
-                        new Request("https://workflow/internal/get-signals", {
-                            method: "POST",
-                            body: JSON.stringify({ userId }),
-                        })
-                    );
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Failed to fetch signals: ${errorText}`);
-                    }
-                    const data = await response.json() as { signals: Array<{
-                        id: string;
-                        entry_id: string;
-                        key: string;
-                        value: number;
-                        confidence: number;
-                        generated_at: number;
-                    }> };
-                    return data.signals;
+                    // Use direct RPC call instead of fetch()
+                    return await userDO.getSignals(userId, {
+                        include_history: false,
+                        window_days: 30
+                    });
                 }
             );
 
@@ -129,22 +76,16 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
 
             if (candidates.length === 0) {
                 console.log(`[FeedWorkflow] No candidates found for user ${userId}`);
-                // Still save empty feed
+                // Still save empty feed using direct RPC
                 await step.do(
                     "persist-empty-feed",
                     async () => {
-                        const feedDO = this.env.USER_FEED_DO.get(
-                            this.env.USER_FEED_DO.idFromName(userId)
+                        const userDO = this.env.USER_DO.get(
+                            this.env.USER_DO.idFromName(userId)
                         );
-                        const response = await feedDO.fetch(
-                            new Request("https://workflow/internal/save-feed", {
-                                method: "POST",
-                                body: JSON.stringify({ userId, items: [] }),
-                            })
-                        );
-                        if (!response.ok) {
-                            throw new Error(`Failed to persist feed: ${await response.text()}`);
-                        }
+                        // Use direct RPC call instead of fetch()
+                        const version = await userDO.getNextFeedVersion(userId);
+                        await userDO.saveFeedSnapshot(userId, version, []);
                     }
                 );
                 return;
@@ -163,35 +104,27 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
             const phrasedItems = await step.do(
                 "phrase-items",
                 async () => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     return await phraseFeedItems(rankedItems, currentTime, undefined, this.env as any);
                 }
             );
 
-            // Step 7: Persist to UserFeedDO
+            // Step 7: Persist to UserDO using direct RPC
             await step.do(
                 "persist-feed",
                 async () => {
-                    const feedDO = this.env.USER_FEED_DO.get(
-                        this.env.USER_FEED_DO.idFromName(userId)
+                    const userDO = this.env.USER_DO.get(
+                        this.env.USER_DO.idFromName(userId)
                     );
-                    const response = await feedDO.fetch(
-                        new Request("https://workflow/internal/save-feed", {
-                            method: "POST",
-                            body: JSON.stringify({ userId, items: phrasedItems }),
-                        })
-                    );
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Failed to persist feed: ${errorText}`);
-                    }
+                    // Use direct RPC call instead of fetch()
+                    const version = await userDO.getNextFeedVersion(userId);
+                    await userDO.saveFeedSnapshot(userId, version, phrasedItems);
                 }
             );
 
-            const duration = Date.now() - startTime;
-            console.log(`[FeedWorkflow] Successfully generated feed for user ${userId}, ${phrasedItems.length} items, duration: ${duration}ms`);
+            console.log(`[FeedWorkflow] Successfully generated feed for user ${userId}, ${phrasedItems.length} items`);
 
         } catch (error: unknown) {
-            const duration = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : String(error);
             console.error(`[FeedWorkflow] Failed for user ${userId}:`, errorMessage);
             throw error; // Re-throw to mark workflow as failed

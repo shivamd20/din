@@ -4,10 +4,10 @@
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./server/index");
-		durableNamespaces: "UserSignalsDO" | "UserCommitmentsDO" | "UserTasksDO" | "UserFeedDO";
+		durableNamespaces: "UserDO";
 	}
 	interface Env {
-		BETTER_AUTH_SECRET: "CHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRET";
+		BETTER_AUTH_SECRET: "CHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRETCHANGE_ME_TO_A_RANDOM_SECRET";
 		GEMINI_API_KEY: "";
 		GOOGLE_CLIENT_ID: string;
 		GOOGLE_CLIENT_SECRET: string;
@@ -15,11 +15,7 @@ declare namespace Cloudflare {
 		VITE_MIXPANEL_TOKEN: string;
 		VITE_CLARITY_PROJECT_ID: string;
 		USE_MOCK_ADAPTER: string;
-		USER_TIMELINE_DO: DurableObjectNamespace<import("./server/index").UserTimelineDO>;
-		USER_SIGNALS_DO: DurableObjectNamespace<import("./server/index").UserSignalsDO>;
-		USER_COMMITMENTS_DO: DurableObjectNamespace<import("./server/index").UserCommitmentsDO>;
-		USER_TASKS_DO: DurableObjectNamespace<import("./server/index").UserTasksDO>;
-		USER_FEED_DO: DurableObjectNamespace<import("./server/index").UserFeedDO>;
+		USER_DO: DurableObjectNamespace<import("./server/index").UserDO>;
 		files: R2Bucket;
 		liva_db: D1Database;
 		ANTHROPIC_API_KEY: SecretsStoreSecret;

@@ -1,15 +1,11 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
-import { UserTimelineDO } from "./UserTimelineDO";
-import { UserSignalsDO } from "./UserSignalsDO";
-import { UserCommitmentsDO } from "./UserCommitmentsDO";
-import { UserTasksDO } from "./UserTasksDO";
-import { UserFeedDO } from "./UserFeedDO";
+import { UserDO } from "./UserDO";
 import { SignalsWorkflow } from "./SignalsWorkflow";
 import { FeedWorkflow } from "./FeedWorkflow";
 import { createAuth } from "./auth";
 import { appRouter, type Context } from "./trpc";
 
-export { UserTimelineDO, UserSignalsDO, UserCommitmentsDO, UserTasksDO, UserFeedDO, SignalsWorkflow, FeedWorkflow };
+export { UserDO, SignalsWorkflow, FeedWorkflow };
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -86,21 +82,10 @@ export default {
 				return new Response("Unauthorized", { status: 401 });
 			}
 
-			const userTimeline = env.USER_TIMELINE_DO.get(
-				env.USER_TIMELINE_DO.idFromName(userId)
+			// Use unified UserDO instead of separate DOs
+			const userDO = env.USER_DO.get(
+				env.USER_DO.idFromName(userId)
 			);
-			const userSignals = env.USER_SIGNALS_DO.get(
-				env.USER_SIGNALS_DO.idFromName(userId)
-			);
-			const userCommitments = env.USER_COMMITMENTS_DO.get(
-				env.USER_COMMITMENTS_DO.idFromName(userId)
-			);
-			const userTasks = env.USER_TASKS_DO.get(
-				env.USER_TASKS_DO.idFromName(userId)
-			);
-			const userFeed = env.USER_FEED_DO.get(
-				env.USER_FEED_DO.idFromName(userId)
-			) as DurableObjectStub<UserFeedDO>;
 
 			return fetchRequestHandler({
 				endpoint: '/api/trpc',
@@ -108,11 +93,7 @@ export default {
 				router: appRouter,
 				createContext: (): Context => ({
 					userId,
-					userTimeline,
-					userSignals,
-					userCommitments,
-					userTasks,
-					userFeed,
+					userDO,
 					signalsWorkflow: env.SIGNALS_WORKFLOW,
 					feedWorkflow: env.FEED_WORKFLOW,
 				}),

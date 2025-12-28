@@ -1,6 +1,6 @@
 import { toolDefinition } from '@tanstack/ai';
 import { z } from 'zod';
-import { UserTimelineDO } from './UserTimelineDO';
+import type { UserDO } from './UserDO';
 
 const getRecentLogsParameters = z.object({
     limit: z.number().optional().default(20),
@@ -28,17 +28,17 @@ const logToTimelineDef = toolDefinition({
     }),
 });
 
-export const createTools = (userTimeline: DurableObjectStub<UserTimelineDO>, userId: string) => {
+export const createTools = (userDO: DurableObjectStub<UserDO>, userId: string) => {
     return [
         getRecentLogsDef.server(async (args: { limit?: number }) => {
             const limit = args.limit ?? 20;
-            const logs = await userTimeline.getRecentEntries(limit);
+            const logs = await userDO.getRecentEntries(limit);
             // Clean logs to remove any non-serializable properties from SQLite result
             return logs.map((l) => ({ ...l }));
         }),
         logToTimelineDef.server(async (args: z.infer<typeof logToTimelineParameters>) => {
             const { text } = args;
-            await userTimeline.addEntry(userId, text, 'chat');
+            await userDO.addEntry(userId, text, 'chat');
             return { success: true, message: "Logged." };
         }),
     ];

@@ -35,12 +35,12 @@ export function BottomNav() {
                             )}>
                                 <Icon
                                     className={cn(
-                                        "w-5 h-5 transition-all",
+                                        "w-4 h-4 transition-all",
                                         isActive ? "stroke-[2.5px]" : "stroke-2"
                                     )}
                                 />
                             </div>
-                            <span className="text-[10px] font-medium tracking-wide">
+                            <span className="text-[10px] font-medium tracking-wide pb-2">
                                 {tab.name}
                             </span>
                         </button>

@@ -30,6 +30,22 @@
 				"UserFeedDO"
 			],
 			"tag": "v4"
+		},
+		{
+			"new_sqlite_classes": [
+				"UserDO"
+			],
+			"tag": "v5"
+		},
+		{
+			"tag": "v6",
+			"deleted_classes": [
+				"UserTimelineDO",
+				"UserSignalsDO",
+				"UserCommitmentsDO",
+				"UserTasksDO",
+				"UserFeedDO"
+			]
 		}
 	],
 	"assets": {
@@ -42,24 +58,8 @@
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "UserTimelineDO",
-				"name": "USER_TIMELINE_DO"
-			},
-			{
-				"class_name": "UserSignalsDO",
-				"name": "USER_SIGNALS_DO"
-			},
-			{
-				"class_name": "UserCommitmentsDO",
-				"name": "USER_COMMITMENTS_DO"
-			},
-			{
-				"class_name": "UserTasksDO",
-				"name": "USER_TASKS_DO"
-			},
-			{
-				"class_name": "UserFeedDO",
-				"name": "USER_FEED_DO"
+				"class_name": "UserDO",
+				"name": "USER_DO"
 			}
 		]
 	},

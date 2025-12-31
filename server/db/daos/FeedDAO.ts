@@ -7,6 +7,8 @@ export interface FeedSnapshot {
     feed_version: number;
     generated_at: number;
     items_json: string;
+    last_processed_entry_id: string | null;
+    cache_metrics_json: string | null;
     [key: string]: SqlStorageValue;
 }
 
@@ -25,6 +27,8 @@ export class FeedDAO {
         version: number;
         generatedAt: number;
         itemsJson: string;
+        lastProcessedEntryId?: string | null;
+        cacheMetricsJson?: string | null;
     }): void {
         this.sql.exec(
             FEED_QUERIES.INSERT,
@@ -32,7 +36,9 @@ export class FeedDAO {
             params.userId,
             params.version,
             params.generatedAt,
-            params.itemsJson
+            params.itemsJson,
+            params.lastProcessedEntryId || null,
+            params.cacheMetricsJson || null
         );
     }
 
@@ -100,6 +106,24 @@ export class FeedDAO {
 
         const maxVersion = result.one()?.max_version;
         return (maxVersion ?? 0) + 1;
+    }
+
+    /**
+     * Get last processed entry ID from the most recent feed snapshot
+     */
+    getLastProcessedEntryId(userId: string): string | null {
+        const result = this.sql.exec<{ last_processed_entry_id: string | null }>(
+            FEED_QUERIES.GET_LAST_PROCESSED_ENTRY_ID,
+            userId
+        );
+
+        const rows = result.toArray();
+        if (rows.length === 0) {
+            return null;
+        }
+
+        const row = rows[0];
+        return row?.last_processed_entry_id || null;
     }
 }
 

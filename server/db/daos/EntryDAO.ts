@@ -13,6 +13,9 @@ export interface Entry {
     linked_commitment_id: string | null;
     event_type: string | null;
     payload_json: string | null;
+    location: string | null;
+    mood: string | null;
+    energy_level: number | null;
     [key: string]: SqlStorageValue;
 }
 
@@ -29,6 +32,9 @@ export interface CreateEntryParams {
     linkedCommitmentId: string | null;
     eventType: string | null;
     payloadJson: string | null;
+    location: string | null;
+    mood: string | null;
+    energyLevel: number | null;
 }
 
 /**
@@ -62,7 +68,10 @@ export class EntryDAO {
             params.linkedTaskId,
             params.linkedCommitmentId,
             params.eventType,
-            params.payloadJson
+            params.payloadJson,
+            params.location,
+            params.mood,
+            params.energyLevel
         );
     }
 
@@ -103,6 +112,13 @@ export class EntryDAO {
     getById(id: string): Entry | null {
         const result = this.sql.exec<Entry>(ENTRY_QUERIES.GET_BY_ID, id).one();
         return result || null;
+    }
+
+    /**
+     * Get all entries for a user (ordered by created_at ASC)
+     */
+    getAllByUser(userId: string): Entry[] {
+        return this.sql.exec<Entry>(ENTRY_QUERIES.GET_ALL_BY_USER, userId).toArray();
     }
 }
 

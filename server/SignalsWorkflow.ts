@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
 import { AIService } from "./ai-service";
-import { DEFAULT_MODEL_ID } from "./ai-model";
+import { DEFAULT_MODEL } from "./ai-model";
 import { v4 as uuidv4 } from 'uuid';
 import type { UserDO } from "./UserDO";
 
@@ -67,7 +67,7 @@ export class SignalsWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
                     await userDO.addSignalsBatch(
                         userId,
                         llmResult.signals,
-                        DEFAULT_MODEL_ID,
+                        DEFAULT_MODEL,
                         triggerCaptureId,
                         windowDays,
                         llmRunId

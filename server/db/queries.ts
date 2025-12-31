@@ -21,7 +21,10 @@ export const SCHEMA_QUERIES = {
             linked_task_id TEXT,
             linked_commitment_id TEXT,
             event_type TEXT,
-            payload_json TEXT
+            payload_json TEXT,
+            location TEXT,
+            mood TEXT,
+            energy_level INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_entries_user_time ON entries(user_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_entries_linked_task ON entries(linked_task_id);
@@ -111,7 +114,9 @@ export const SCHEMA_QUERIES = {
             user_id TEXT NOT NULL,
             feed_version INTEGER NOT NULL,
             generated_at INTEGER NOT NULL,
-            items_json TEXT NOT NULL
+            items_json TEXT NOT NULL,
+            last_processed_entry_id TEXT,
+            cache_metrics_json TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_feed_user_version ON feed_snapshots(user_id, feed_version DESC);
         CREATE INDEX IF NOT EXISTS idx_feed_user_generated ON feed_snapshots(user_id, generated_at DESC);
@@ -145,6 +150,25 @@ export const SCHEMA_QUERIES = {
 };
 
 // ============================================================================
+// Migration Queries
+// ============================================================================
+
+export const MIGRATION_QUERIES = {
+    // Add optional context columns to entries table if they don't exist
+    ADD_ENTRIES_CONTEXT_COLUMNS: `
+        -- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we use a workaround
+        -- Check if columns exist by trying to select them, and add if they don't
+        -- Note: This will be run on each initialization, but ALTER TABLE is idempotent
+        -- if the column already exists (it will just be ignored in practice)
+    `,
+    
+    // Add new columns to feed_snapshots table
+    ADD_FEED_SNAPSHOTS_COLUMNS: `
+        -- Similar approach for feed_snapshots
+    `,
+};
+
+// ============================================================================
 // Entry Queries
 // ============================================================================
 
@@ -155,8 +179,8 @@ export const ENTRY_QUERIES = {
         INSERT INTO entries (
             id, user_id, text, created_at, source, attachments_json,
             root_id, parent_id, linked_task_id, linked_commitment_id,
-            event_type, payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            event_type, payload_json, location, mood, energy_level
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
 
     GET_BY_USER_TIME_WINDOW: `
@@ -172,6 +196,12 @@ export const ENTRY_QUERIES = {
     GET_RECENT: `SELECT * FROM entries ORDER BY created_at DESC LIMIT ?`,
 
     GET_BY_ID: `SELECT * FROM entries WHERE id = ?`,
+
+    GET_ALL_BY_USER: `
+        SELECT * FROM entries 
+        WHERE user_id = ? 
+        ORDER BY created_at ASC
+    `,
 };
 
 // ============================================================================
@@ -285,8 +315,8 @@ export const TASK_QUERIES = {
 
 export const FEED_QUERIES = {
     INSERT: `
-        INSERT INTO feed_snapshots (id, user_id, feed_version, generated_at, items_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO feed_snapshots (id, user_id, feed_version, generated_at, items_json, last_processed_entry_id, cache_metrics_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
 
     GET_CURRENT: `
@@ -308,6 +338,14 @@ export const FEED_QUERIES = {
         SELECT MAX(feed_version) as max_version
         FROM feed_snapshots
         WHERE user_id = ?
+    `,
+
+    GET_LAST_PROCESSED_ENTRY_ID: `
+        SELECT last_processed_entry_id
+        FROM feed_snapshots
+        WHERE user_id = ?
+        ORDER BY feed_version DESC
+        LIMIT 1
     `,
 };
 

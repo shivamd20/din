@@ -164,17 +164,9 @@ export const appRouter = t.router({
             }),
         refresh: t.procedure
             .mutation(async ({ ctx }) => {
-                // Trigger feed workflow manually
-                if (ctx.feedWorkflow) {
-                    await ctx.feedWorkflow.create({
-                        id: `${ctx.userId}-feed-manual-${Date.now()}`,
-                        params: {
-                            userId: ctx.userId,
-                        },
-                    });
-                } else {
-                    console.warn('Feed workflow not available - skipping feed refresh');
-                }
+                // Trigger feed regeneration manually via UserDO method
+                // This ensures consistency with batch processing and clears regeneration flags
+                await ctx.userDO.triggerFeedRegeneration(ctx.userId);
                 return { success: true };
             }),
         getHistory: t.procedure

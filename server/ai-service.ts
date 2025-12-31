@@ -39,7 +39,10 @@ export type SignalsCommitmentsTasks = z.infer<typeof SignalsCommitmentsTasksSche
 export class AIService {
     private model: AIModel;
 
-    constructor(env: Env) {
+    constructor(env: Env & { 
+        ANTHROPIC_API_KEY?: SecretsStoreSecret | string;
+        GEMINI_API_KEY?: SecretsStoreSecret | string;
+    }) {
         this.model = new AIModel(env);
     }
 
@@ -76,7 +79,7 @@ Generate:
 Return structured data matching the provided schema.`;
 
         // Get adapter from model
-        const adapter = this.model.getAdapter();
+        const adapter = await this.model.getAdapter();
 
         try {
             const result = await chat({

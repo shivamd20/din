@@ -1,10 +1,11 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
 import type { UserDO } from "./UserDO";
-import { buildCandidates, scoreItems, rankItems } from "./feed-generator";
-import { phraseFeedItems } from "./feed-phrasing";
+import { buildPrompt } from "./prompt-builder";
+import { generateFeed } from "./llm-feed-generator";
 
 export interface Env {
-    GEMINI_API_KEY: string;
+    ANTHROPIC_API_KEY?: SecretsStoreSecret | string;
+    GEMINI_API_KEY?: SecretsStoreSecret | string;
     AI: unknown;
     USER_DO: DurableObjectNamespace<UserDO>;
 }
@@ -15,7 +16,7 @@ export interface FeedWorkflowParams {
 }
 
 /**
- * Workflow to generate and materialize the feed
+ * Workflow to generate and materialize the feed using LLM-first approach
  */
 export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
     async run(event: Readonly<WorkflowEvent<FeedWorkflowParams>>, step: WorkflowStep): Promise<void> {
@@ -23,106 +24,67 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
         const currentTime = Date.now();
 
         try {
-            // Step 1: Fetch tasks (pending/in_progress) using direct RPC
-            const tasks = await step.do(
-                "fetch-tasks",
+            // Step 1: Fetch all entries
+            const allEntries = await step.do(
+                "fetch-entries",
                 async () => {
                     const userDO = this.env.USER_DO.get(
                         this.env.USER_DO.idFromName(userId)
                     );
-                    // Use direct RPC call instead of fetch()
-                    return await userDO.getTasks(userId, {
-                        include_history: false
-                    });
+                    return await userDO.getAllEntries(userId);
                 }
             );
 
-            // Step 2: Fetch commitments (active) using direct RPC
-            const commitments = await step.do(
-                "fetch-commitments",
+            // Step 2: Get last processed entry ID from last feed generation
+            const lastProcessedEntryId = await step.do(
+                "get-last-processed",
                 async () => {
                     const userDO = this.env.USER_DO.get(
                         this.env.USER_DO.idFromName(userId)
                     );
-                    // Use direct RPC call instead of fetch()
-                    return await userDO.getCommitments(userId, {
-                        include_history: false
-                    });
+                    return await userDO.getLastProcessedEntryId(userId);
                 }
             );
 
-            // Step 3: Fetch recent signals using direct RPC
-            const signals = await step.do(
-                "fetch-signals",
+            // Step 3: Build prompt structure (70-90% prefix, 10-30% suffix)
+            const promptStructure = await step.do(
+                "build-prompt",
                 async () => {
-                    const userDO = this.env.USER_DO.get(
-                        this.env.USER_DO.idFromName(userId)
-                    );
-                    // Use direct RPC call instead of fetch()
-                    return await userDO.getSignals(userId, {
-                        include_history: false,
-                        window_days: 30
-                    });
+                    return buildPrompt(allEntries, lastProcessedEntryId, currentTime);
                 }
             );
 
-            // Step 4: Build candidates
-            const candidates = await step.do(
-                "build-candidates",
-                async () => {
-                    return buildCandidates(tasks, commitments, signals);
-                }
-            );
-
-            if (candidates.length === 0) {
-                console.log(`[FeedWorkflow] No candidates found for user ${userId}`);
-                // Still save empty feed using direct RPC
-                await step.do(
-                    "persist-empty-feed",
-                    async () => {
-                        const userDO = this.env.USER_DO.get(
-                            this.env.USER_DO.idFromName(userId)
-                        );
-                        // Use direct RPC call instead of fetch()
-                        const version = await userDO.getNextFeedVersion(userId);
-                        await userDO.saveFeedSnapshot(userId, version, []);
-                    }
-                );
-                return;
-            }
-
-            // Step 5: Score and rank
-            const rankedItems = await step.do(
-                "score-and-rank",
-                async () => {
-                    const scored = scoreItems(candidates, currentTime);
-                    return rankItems(scored);
-                }
-            );
-
-            // Step 6: Call LLM for phrasing
-            const phrasedItems = await step.do(
-                "phrase-items",
+            // Step 4: Generate feed with LLM (Anthropic with prompt caching)
+            const { items, metrics } = await step.do(
+                "generate-feed",
                 async () => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    return await phraseFeedItems(rankedItems, currentTime, undefined, this.env as any);
+                    return await generateFeed(promptStructure, this.env as any);
                 }
             );
 
-            // Step 7: Persist to UserDO using direct RPC
+            // Step 5: Persist feed and update last_processed_entry_id
             await step.do(
                 "persist-feed",
                 async () => {
                     const userDO = this.env.USER_DO.get(
                         this.env.USER_DO.idFromName(userId)
                     );
-                    // Use direct RPC call instead of fetch()
                     const version = await userDO.getNextFeedVersion(userId);
-                    await userDO.saveFeedSnapshot(userId, version, phrasedItems);
+                    
+                    // Determine last processed entry ID
+                    const newLastProcessedEntryId = allEntries.length > 0 
+                        ? allEntries[allEntries.length - 1].id 
+                        : lastProcessedEntryId;
+                    
+                    await userDO.saveFeedSnapshot(userId, version, items, {
+                        lastProcessedEntryId: newLastProcessedEntryId,
+                        cacheMetrics: metrics
+                    });
                 }
             );
 
-            console.log(`[FeedWorkflow] Successfully generated feed for user ${userId}, ${phrasedItems.length} items`);
+            console.log(`[FeedWorkflow] Generated feed for user ${userId}, ${items.length} items, cache hit rate: ${(metrics.cache_hit_rate * 100).toFixed(1)}%`);
 
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);

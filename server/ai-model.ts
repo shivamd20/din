@@ -1,68 +1,135 @@
 import { chat } from '@tanstack/ai';
+import { anthropicText } from './anthropic-adapter';
 import { geminiText } from '@tanstack/ai-gemini';
 import { SignalSchema, type Signals } from './ai-service';
-import { mockText } from './mock-adapter';
 import type { AnyTextAdapter } from '@tanstack/ai';
+import type { z } from 'zod';
 
-// Centralized model configuration - only Gemini models now
-// Using supported model IDs from @tanstack/ai-gemini
-export const KNOWN_MODELS = {
-    'gemini-2.0-flash': { id: 'gemini-2.0-flash' as const },
-    'gemini-2.5-flash': { id: 'gemini-2.5-flash' as const },
-} as const;
+// Default models
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-3-haiku-20240307';
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+export const DEFAULT_MODEL = DEFAULT_ANTHROPIC_MODEL;
 
-export type ModelId = keyof typeof KNOWN_MODELS;
-export const DEFAULT_MODEL_ID: ModelId = 'gemini-2.0-flash';
+export type Provider = 'anthropic' | 'gemini';
 
 export class AIModel {
-    private apiKey: string;
-    private useMock: boolean;
+    private anthropicApiKeyPromise: Promise<string> | null = null;
+    private geminiApiKeyPromise: Promise<string> | null = null;
+    private defaultProvider: Provider;
 
-    constructor(private env: Env & { USE_MOCK_ADAPTER?: string; USE_MOCK_ADAPTER_DEBUG?: string }) {
-        this.apiKey = env.GEMINI_API_KEY;
-        // Use mock adapter if USE_MOCK_ADAPTER is set to 'true' or if API key is missing
-        this.useMock = true
+    constructor(private env: Env & { 
+        ANTHROPIC_API_KEY?: SecretsStoreSecret | string;
+        GEMINI_API_KEY?: SecretsStoreSecret | string | undefined;
+        DEFAULT_AI_PROVIDER?: Provider;
+    }) {
+        // Initialize Anthropic API key if available
+        if (env.ANTHROPIC_API_KEY) {
+            if (typeof env.ANTHROPIC_API_KEY === 'string') {
+                this.anthropicApiKeyPromise = Promise.resolve(env.ANTHROPIC_API_KEY);
+            } else {
+                this.anthropicApiKeyPromise = env.ANTHROPIC_API_KEY.get();
+            }
+        }
+
+        // Initialize Gemini API key if available
+        const geminiKey: SecretsStoreSecret | string | undefined = env.GEMINI_API_KEY;
         
-        if (this.useMock) {
-            console.log('[AIModel] Using mock adapter (offline mode)');
+        if (geminiKey) {
+            if (typeof geminiKey === 'string') {
+                const trimmed = geminiKey.trim();
+                if (trimmed !== '') {
+                    this.geminiApiKeyPromise = Promise.resolve(trimmed);
+                }
+            } else {
+                // It's a SecretsStoreSecret
+                this.geminiApiKeyPromise = geminiKey.get();
+            }
         }
-    }
 
-    private getModelId(modelId: string = DEFAULT_MODEL_ID): typeof KNOWN_MODELS[typeof DEFAULT_MODEL_ID]['id'] {
-        const config = KNOWN_MODELS[modelId as ModelId];
-
-        if (!config) {
-            console.warn(`Unknown model ${modelId}, falling back to default`);
-            return KNOWN_MODELS[DEFAULT_MODEL_ID].id;
-        }
-
-        return config.id;
+        // Hardcode Gemini as default provider
+        this.defaultProvider = env.DEFAULT_AI_PROVIDER || 'gemini';
+        
+        console.log('[AIModel] Default provider:', this.defaultProvider);
+        console.log('[AIModel] Has Gemini key:', !!this.geminiApiKeyPromise);
+        console.log('[AIModel] Has Anthropic key:', !!this.anthropicApiKeyPromise);
     }
 
     /**
-     * Get the appropriate adapter (mock or real)
+     * Get the adapter for the specified provider (or default)
      */
-    getAdapter(modelId?: string): AnyTextAdapter {
-        if (this.useMock) {
-            // Use default responseGenerator from mock-adapter which handles all cases
-            return mockText({
-                delay: 100,
-                chunkDelay: 30,
-                debug: this.env.USE_MOCK_ADAPTER_DEBUG === 'true',
-            })('mock-model');
+    async getAdapter(modelId?: string, provider?: Provider): Promise<AnyTextAdapter> {
+        const selectedProvider = provider || this.defaultProvider;
+        console.log('[AIModel] getAdapter - selected provider:', selectedProvider, 'default:', this.defaultProvider);
+        
+        if (selectedProvider === 'anthropic') {
+            if (!this.anthropicApiKeyPromise) {
+                throw new Error('ANTHROPIC_API_KEY is not configured');
+            }
+            const apiKey = await this.anthropicApiKeyPromise;
+            const model = modelId || DEFAULT_ANTHROPIC_MODEL;
+            return anthropicText({
+                apiKey,
+                cacheControl: { type: 'ephemeral' }
+            })(model) as AnyTextAdapter;
+        } else {
+            if (!this.geminiApiKeyPromise) {
+                throw new Error('GEMINI_API_KEY is not configured');
+            }
+            const apiKey = await this.geminiApiKeyPromise;
+            // geminiText expects specific model types, so we validate or use default
+            const validGeminiModels = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-pro-preview'] as const;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const model = (modelId && validGeminiModels.includes(modelId as any)) 
+                ? (modelId as typeof validGeminiModels[number])
+                : DEFAULT_GEMINI_MODEL;
+            return geminiText(model, { apiKey }) as AnyTextAdapter;
         }
+    }
 
-        const id = modelId || DEFAULT_MODEL_ID;
-        const model = this.getModelId(id);
-        // Type assertion needed due to TanStack AI type system complexity
-        return geminiText(model, { apiKey: this.apiKey }) as AnyTextAdapter;
+    /**
+     * Generate structured output (for feed generation)
+     * Uses same chat infrastructure as regular chat
+     */
+    async generateStructured<T>(
+        systemPrompt: string,
+        userMessage: string,
+        outputSchema: z.ZodSchema<T>,
+        options?: {
+            temperature?: number;
+            topP?: number;
+            maxTokens?: number;
+            provider?: Provider;
+        }
+    ): Promise<T> {
+        const adapter = await this.getAdapter(undefined, options?.provider);
+        
+        const result = await chat({
+            adapter,
+            messages: [
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                { role: 'system' as any, content: systemPrompt }, // Frozen prefix - cached
+                { role: 'user', content: userMessage } // Variable suffix - processed
+            ],
+            outputSchema,
+            ...(options && {
+                providerOptions: {
+                    temperature: options.temperature ?? 0, // Default to 0 for determinism
+                    topP: options.topP ?? 1, // Default to 1 for determinism
+                    maxTokens: options.maxTokens ?? 4000
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                } as any
+            })
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        return result as T;
     }
 
     /**
      * Extracts structured signals from user text.
      */
-    async extractSignals(text: string): Promise<Signals> {
-        const adapter = this.getAdapter();
+    async extractSignals(text: string, provider?: Provider): Promise<Signals> {
+        const adapter = await this.getAdapter(undefined, provider);
 
         try {
             const result = await chat({
@@ -94,9 +161,10 @@ export class AIModel {
 
     /**
      * Streams a chat response with optional tools.
+     * Future: Will support persistent chat
      */
-    streamChat(messages: Array<{ role: string; content: string }>, tools?: Array<unknown>, modelId?: string) {
-        const adapter = this.getAdapter(modelId);
+    async streamChat(messages: Array<{ role: string; content: string }>, tools?: Array<unknown>, modelId?: string, provider?: Provider) {
+        const adapter = await this.getAdapter(modelId, provider);
 
         // Convert messages format if needed (from old format to TanStack format)
         const tanstackMessages = messages
@@ -116,12 +184,12 @@ export class AIModel {
             .filter((msg): msg is { role: 'user' | 'assistant'; content: string } => msg !== null);
 
         const systemPrompt = `You represent the user's inner voice (the 'Reflect' persona).
-    - You are gentle, concise, and insightful.
-    - You help the user identify patterns and feelings.
-    - You NEVER judge.
-    - You use short paragraphs.
-    - IF the user asks to log something explicitly, use the 'logToTimeline' tool.
-    - IF you need context, use 'getRecentLogs'.`;
+- You are gentle, concise, and insightful.
+- You help the user identify patterns and feelings.
+- You NEVER judge.
+- You use short paragraphs.
+- IF the user asks to log something explicitly, use the 'logToTimeline' tool.
+- IF you need context, use 'getRecentLogs'.`;
 
         // Prepend system prompt to first user message if no messages exist, or add as first message
         const messagesWithSystem = tanstackMessages.length > 0 && tanstackMessages[0].role === 'user'

@@ -14,11 +14,16 @@ export class FeedService {
     saveFeedSnapshot(
         userId: string,
         version: number,
-        items: FeedItemRendered[]
+        items: FeedItemRendered[],
+        metadata?: {
+            lastProcessedEntryId?: string | null;
+            cacheMetrics?: any;
+        }
     ): string {
         const id = uuidv4();
         const now = Date.now();
         const itemsJson = JSON.stringify(items);
+        const cacheMetricsJson = metadata?.cacheMetrics ? JSON.stringify(metadata.cacheMetrics) : null;
 
         this.feedDAO.save({
             id,
@@ -26,6 +31,8 @@ export class FeedService {
             version,
             generatedAt: now,
             itemsJson,
+            lastProcessedEntryId: metadata?.lastProcessedEntryId || null,
+            cacheMetricsJson,
         });
 
         return id;
@@ -55,5 +62,13 @@ export class FeedService {
     getNextFeedVersion(userId: string): number {
         return this.feedDAO.getNextVersion(userId);
     }
+
+    /**
+     * Get last processed entry ID from the most recent feed snapshot
+     */
+    getLastProcessedEntryId(userId: string): string | null {
+        return this.feedDAO.getLastProcessedEntryId(userId);
+    }
 }
+
 

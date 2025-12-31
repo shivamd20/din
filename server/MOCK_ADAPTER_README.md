@@ -68,3 +68,4 @@ To use the real Gemini adapter:
 
 The adapter will automatically fall back to the real provider when the API key is present and mock mode is disabled.
 
+

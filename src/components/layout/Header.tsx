@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { UserCircle, RefreshCcw, LogOut, Menu, Clock } from 'lucide-react';
+import { UserCircle, RefreshCcw, LogOut, Menu, Clock, RotateCw } from 'lucide-react';
 import { type Session, signOut, signIn } from '@/lib/auth-client';
 import {
     DropdownMenu,
@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { db } from '@/lib/db';
+import { trpc } from '@/lib/trpc';
+import { useState } from 'react';
 
 interface HeaderProps {
     user: Session['user'];
@@ -17,6 +19,29 @@ interface HeaderProps {
 
 export function Header({ user }: HeaderProps) {
     const navigate = useNavigate();
+    const utils = trpc.useUtils();
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    
+    const refreshFeedMutation = trpc.feed.refresh.useMutation({
+        onSuccess: () => {
+            // Invalidate and refetch feed data
+            utils.feed.getCurrent.invalidate();
+            setIsRefreshing(false);
+        },
+        onError: (error) => {
+            console.error('Failed to refresh feed:', error);
+            setIsRefreshing(false);
+        },
+    });
+
+    const handleRefreshFeed = async () => {
+        setIsRefreshing(true);
+        try {
+            await refreshFeedMutation.mutateAsync();
+        } catch (error) {
+            // Error is handled in onError
+        }
+    };
 
     const handleLogout = async () => {
         try {
@@ -54,6 +79,14 @@ export function Header({ user }: HeaderProps) {
                         >
                             <Clock className="mr-2 h-4 w-4" />
                             <span>Timeline</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={handleRefreshFeed}
+                            disabled={isRefreshing}
+                            className="cursor-pointer"
+                        >
+                            <RotateCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            <span>{isRefreshing ? 'Refreshing...' : 'Refresh Feed'}</span>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

@@ -23,10 +23,10 @@ export async function handleChatRequest(request: Request, env: Env) {
 
     const tools = createTools(userDO, session.user.id);
 
-    const aiModel = new AIModel(env);
+    const aiModel = new AIModel(env as any);
 
     try {
-        const stream = aiModel.streamChat(messages, tools, modelId);
+        const stream = await aiModel.streamChat(messages, tools, modelId);
         return new Response(toServerSentEventsStream(stream), {
             headers: {
                 'Content-Type': 'text/event-stream',

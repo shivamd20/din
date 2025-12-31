@@ -12,6 +12,9 @@ export interface AddEntryOptions {
     eventType?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     payload?: any;
+    location?: string;
+    mood?: string;
+    energyLevel?: number;
 }
 
 /**
@@ -38,6 +41,9 @@ export class EntryService {
         const linkedCommitmentId = opts?.linkedCommitmentId || null;
         const eventType = opts?.eventType || null;
         const payloadJson = opts?.payload ? JSON.stringify(opts.payload) : null;
+        const location = opts?.location || null;
+        const mood = opts?.mood || null;
+        const energyLevel = opts?.energyLevel || null;
 
         // Check if entry exists (idempotency)
         if (!this.entryDAO.exists(entryId)) {
@@ -54,6 +60,9 @@ export class EntryService {
                 linkedCommitmentId,
                 eventType,
                 payloadJson,
+                location,
+                mood,
+                energyLevel,
             };
             this.entryDAO.create(params);
         }
@@ -104,5 +113,13 @@ export class EntryService {
     getRecentEntries(limit: number = 20) {
         return this.entryDAO.getRecent(limit);
     }
+
+    /**
+     * Get all entries for a user (ordered by created_at ASC)
+     */
+    getAllEntries(userId: string) {
+        return this.entryDAO.getAllByUser(userId);
+    }
 }
+
 

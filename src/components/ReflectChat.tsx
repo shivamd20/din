@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useChat as useTanstackChat } from '@tanstack/ai-react';
 import { fetchServerSentEvents } from '@tanstack/ai-client';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SendHorizontal, Sparkles, Wrench, Plus, ChevronDown } from 'lucide-react';
+import { SendHorizontal, Sparkles, Wrench, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EntryCard, TaskCard, CommitmentCard } from './chat';
 import MDEditor from '@uiw/react-md-editor';
@@ -12,14 +12,12 @@ export default function ReflectChat() {
     const { chatId: urlChatId } = useParams<{ chatId?: string }>();
     const navigate = useNavigate();
     const [input, setInput] = useState('');
-    const [showChatSwitcher, setShowChatSwitcher] = useState(false);
     const [pendingMessage, setPendingMessage] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
-    const switcherRef = useRef<HTMLDivElement>(null);
 
-    // Fetch chat list
-    const { data: chats = [], refetch: refetchChats } = trpc.chats.list.useQuery();
+    // Fetch chat list to get most recent chat
+    const { data: chats = [] } = trpc.chats.list.useQuery();
 
     // Fetch current chat messages if chatId is set
     const { data: chatData } = trpc.chats.get.useQuery(
@@ -27,22 +25,20 @@ export default function ReflectChat() {
         { enabled: !!urlChatId }
     ) as { data?: { chat: { id: string; title: string; created_at: number; updated_at: number }; messages: Array<{ id: string; role: string; parts: unknown[]; createdAt: number }> } | null };
 
-    // Create chat mutation
-    const createChatMutation = trpc.chats.create.useMutation({
-        onSuccess: (data) => {
-            navigate(`/chat/${data.chatId}`, { replace: true });
-            refetchChats();
-        },
-    });
-
     // Auto-select most recent chat when navigating to /chat without chatId
     useEffect(() => {
         if (!urlChatId && chats.length > 0) {
             // Navigate to most recent chat (first in list, sorted by updated_at DESC)
             navigate(`/chat/${chats[0].id}`, { replace: true });
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [urlChatId, chats.length, navigate]); // Only check chats.length to avoid re-running when chats update
+    }, [urlChatId, chats, navigate]);
+
+    // Create chat mutation
+    const createChatMutation = trpc.chats.create.useMutation({
+        onSuccess: (data) => {
+            navigate(`/chat/${data.chatId}`, { replace: true });
+        },
+    });
 
     // Convert chat messages to initialMessages format
     const initialMessages = useMemo(() => {
@@ -94,10 +90,6 @@ export default function ReflectChat() {
         connection,
         initialMessages, // Used on initial mount
         onError: (e: Error) => console.error('Chat error:', e),
-        onFinish: () => {
-            // Refetch chats after message completes to get updated titles
-            refetchChats();
-        },
     });
 
     // Update messages when chat changes (initialMessages only works on mount)
@@ -122,19 +114,6 @@ export default function ReflectChat() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [urlChatId, initialMessages]); // Watch both - urlChatId for chat switches, initialMessages for query updates
 
-    // Close switcher when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (switcherRef.current && !switcherRef.current.contains(event.target as Node)) {
-                setShowChatSwitcher(false);
-            }
-        };
-        if (showChatSwitcher) {
-            document.addEventListener('mousedown', handleClickOutside);
-            return () => document.removeEventListener('mousedown', handleClickOutside);
-        }
-    }, [showChatSwitcher]);
-
     const handleNewChat = async () => {
         // Create new chat and navigate to it
         const result = await createChatMutation.mutateAsync({});
@@ -143,8 +122,8 @@ export default function ReflectChat() {
         inputRef.current?.focus();
     };
 
-    // Get chat title from query result or chats list
-    const chatTitle = chatData?.chat?.title || chats.find(c => c.id === urlChatId)?.title || 'New Chat';
+    // Get chat title from query result
+    const chatTitle = chatData?.chat?.title || 'New Chat';
 
     // Auto-scroll
     useEffect(() => {
@@ -194,70 +173,19 @@ export default function ReflectChat() {
 
     return (
         <div className="flex flex-col flex-1 w-full relative bg-zinc-50/30 overflow-hidden" data-color-mode="light">
-            {/* Chat Header with Switcher */}
-            <div className="px-4 py-3 bg-white/95 backdrop-blur-xl border-b border-zinc-100/80 flex items-center justify-between relative">
-                <div className="relative flex-1 min-w-0" ref={switcherRef}>
-                    <button
-                        onClick={() => setShowChatSwitcher(!showChatSwitcher)}
-                        className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-zinc-50 transition-colors text-left min-w-0 flex-1 group"
-                    >
-                        <span className="text-sm font-medium text-zinc-900 truncate flex-1">
-                            {chatTitle}
-                        </span>
-                        <ChevronDown className={cn(
-                            "w-4 h-4 text-zinc-400 shrink-0 transition-transform",
-                            showChatSwitcher && "rotate-180"
-                        )} />
-                    </button>
-
-                    {/* Chat Switcher Dropdown */}
-                    {showChatSwitcher && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 max-h-[60vh] overflow-y-auto">
-                            <div className="p-1">
-                                <button
-                                    onClick={async () => {
-                                        await handleNewChat();
-                                        setShowChatSwitcher(false);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-50 text-left transition-colors"
-                                >
-                                    <Plus className="w-4 h-4 text-zinc-500" />
-                                    <span className="text-sm font-medium text-zinc-900">New Chat</span>
-                                </button>
-                                {chats.length > 0 && (
-                                    <>
-                                        <div className="border-t border-zinc-100 my-1" />
-                                        {chats.map((chat) => (
-                                            <button
-                                                key={chat.id}
-                                                onClick={() => {
-                                                    navigate(`/chat/${chat.id}`);
-                                                    setShowChatSwitcher(false);
-                                                }}
-                                                className={cn(
-                                                    "w-full flex flex-col gap-0.5 px-3 py-2 rounded-lg hover:bg-zinc-50 text-left transition-colors",
-                                                    urlChatId === chat.id && "bg-zinc-50"
-                                                )}
-                                            >
-                                                <span className="text-sm font-medium text-zinc-900 truncate">
-                                                    {chat.title}
-                                                </span>
-                                                <span className="text-xs text-zinc-400">
-                                                    {new Date(chat.updated_at).toLocaleDateString('en-US', {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        hour: 'numeric',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
+            {/* Simple Chat Header */}
+            <div className="px-4 py-3 bg-white/95 backdrop-blur-xl border-b border-zinc-100/80 flex items-center justify-between">
+                <span className="text-sm font-medium text-zinc-900 truncate flex-1">
+                    {chatTitle}
+                </span>
+                <button
+                    onClick={handleNewChat}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-zinc-50 transition-colors text-sm text-zinc-700 shrink-0"
+                    title="New Chat"
+                >
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden sm:inline">New</span>
+                </button>
             </div>
             <style>{`
                 /* Markdown styling for chat */

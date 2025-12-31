@@ -63,9 +63,13 @@ export async function handleChatRequest(request: Request, env: Env) {
                 // Collect content chunks
                 if (chunk.type === 'content') {
                     const contentChunk = chunk as { content?: string; delta?: string };
-                    const text = contentChunk.content || contentChunk.delta || '';
-                    if (text) {
-                        currentTextContent += text;
+                    // Use delta for accumulation (incremental), or content if delta not available (use as final)
+                    if (contentChunk.delta) {
+                        // Delta is incremental - accumulate it
+                        currentTextContent += contentChunk.delta;
+                    } else if (contentChunk.content) {
+                        // Content is full accumulated text - use it directly (replace, don't accumulate)
+                        currentTextContent = contentChunk.content;
                     }
                 } else if (chunk.type === 'tool_call' || chunk.type === 'tool_result') {
                     // Save accumulated text before tool call/result

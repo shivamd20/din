@@ -99,7 +99,7 @@ export default function App() {
                 <Route path="/api/auth/callback/*" element={<AuthCallbackHandler />} />
                 <Route element={<ProtectedLayout />}>
                   <Route path="/" element={<HomePage />} />
-                  <Route path="/chat" element={<ReflectChat />} />
+                  <Route path="/chat/:chatId?" element={<ReflectChat />} />
                   <Route path="/tasks" element={<TasksPage />} />
                   <Route path="/commitments" element={<CommitmentsPage />} />
                   <Route path="/commitments/:commitmentId" element={<CommitmentDetailPage />} />

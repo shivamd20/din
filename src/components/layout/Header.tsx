@@ -27,6 +27,10 @@ export function Header({ user }: HeaderProps) {
             // Invalidate and refetch feed data
             utils.feed.getCurrent.invalidate();
             setIsRefreshing(false);
+            
+            // Emit feed refresh event to clear dismissed cards
+            const feedRefreshEvent = new CustomEvent('feed:refreshed');
+            window.dispatchEvent(feedRefreshEvent);
         },
         onError: (error) => {
             console.error('Failed to refresh feed:', error);

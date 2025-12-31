@@ -91,8 +91,31 @@ export function CaptureBox() {
                 navigator.vibrate(50); // 50ms subtle pulse
             }
 
-            // Create capture with metadata if available
-            await createCapture.mutateAsync({
+            // Show undo toast if this was an event-driven action
+            if (metadata?.event_type) {
+                showUndo(entryId);
+            }
+
+            // Close modal immediately (optimistic)
+            closeCapture();
+
+            // Trigger background sync (fire and forget)
+            // If this is an event-driven action, mark the card as pending
+            if (metadata?.feed_item_id || metadata?.event_type) {
+                // Emit action event for action state tracking
+                const event = new CustomEvent('action:taken', {
+                    detail: {
+                        entryId,
+                        cardId: metadata?.feed_item_id || entryId,
+                        actionType: metadata?.action_type || metadata?.event_type,
+                        timestamp: now,
+                    }
+                });
+                window.dispatchEvent(event);
+            }
+
+            // Background sync - don't await
+            createCapture.mutateAsync({
                 entryId,
                 text: text.trim(),
                 attachments: attachments,
@@ -103,17 +126,25 @@ export function CaptureBox() {
                 feed_item_id: metadata?.feed_item_id,
                 action_type: metadata?.action_type,
                 action_context: metadata?.action_context,
+            }).then(async () => {
+                // If direct mutation succeeds, mark as synced locally
+                await db.entries.update(entryId, { synced: 1 });
+                // Emit sync complete event
+                const syncCompleteEvent = new CustomEvent('sync:complete', {
+                    detail: { entryId }
+                });
+                window.dispatchEvent(syncCompleteEvent);
+            }).catch(() => {
+                // Silent - will retry via sync queue
+                // Sync queue will handle it when it processes unsynced entries
             });
 
-            // Show undo toast if this was an event-driven action
-            if (metadata?.event_type) {
-                showUndo(entryId);
-            }
-
+            // Trigger sync queue (will handle if direct mutation failed)
             syncQueue();
-            closeCapture();
         } catch (error) {
-            console.error("Capture failed", error);
+            console.error("Capture failed locally", error);
+            // Even on local error, close modal (user can retry)
+            closeCapture();
         }
     };
 

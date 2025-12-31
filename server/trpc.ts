@@ -119,6 +119,37 @@ export const appRouter = t.router({
             .query(async ({ ctx, input }) => {
                 return await ctx.userDO.getCommitments(ctx.userId, input);
             }),
+        getDetail: t.procedure
+            .input(z.object({
+                commitmentId: z.string(),
+            }))
+            .query(async ({ ctx, input }) => {
+                // First try to find by ID in current commitments
+                let commitments = await ctx.userDO.getCommitments(ctx.userId, {});
+                let commitment = commitments.find(c => c.id === input.commitmentId);
+                
+                // If not found, try including history to find old versions
+                if (!commitment) {
+                    commitments = await ctx.userDO.getCommitments(ctx.userId, { include_history: true });
+                    commitment = commitments.find(c => c.id === input.commitmentId);
+                    
+                    // If found in history, get the latest version of that commitment
+                    if (commitment) {
+                        const latestCommitments = await ctx.userDO.getCommitments(ctx.userId, {});
+                        const latestCommitment = latestCommitments.find(
+                            c => c.origin_entry_id === commitment!.origin_entry_id
+                        );
+                        if (latestCommitment) {
+                            commitment = latestCommitment;
+                        }
+                    }
+                }
+                
+                if (!commitment) {
+                    throw new Error(`Commitment ${input.commitmentId} not found`);
+                }
+                return commitment;
+            }),
     }),
 
     tasks: t.router({
@@ -130,6 +161,15 @@ export const appRouter = t.router({
             }))
             .query(async ({ ctx, input }) => {
                 return await ctx.userDO.getTasks(ctx.userId, input);
+            }),
+        timeline: t.procedure
+            .input(z.object({
+                commitment_id: z.string().optional(),
+                category: z.enum(['work', 'personal', 'health']).optional(),
+                time_horizon: z.enum(['week', 'month', 'quarter']).optional(),
+            }))
+            .query(async ({ ctx, input }) => {
+                return await ctx.userDO.getTimeline(ctx.userId, input);
             }),
     }),
 

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { CheckCircle2, Clock, MessageSquareQuote, CheckSquare, Target, ArrowRight, HelpCircle, AlertCircle, ExternalLink, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle2, Clock, MessageSquareQuote, CheckSquare, Target, ArrowRight, HelpCircle, AlertCircle, ExternalLink, Zap, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { DynamicCardData, CardAction } from '../../hooks/use-home-data';
 import { cn } from '@/lib/utils';
+import { useActionState } from '@/hooks/use-action-state';
 
 interface CardProps {
     data: DynamicCardData & {
@@ -24,7 +25,9 @@ function BaseCard({
     priorityScore,
     expiresAt,
     relatedTaskId,
-    relatedCommitmentId
+    relatedCommitmentId,
+    cardId,
+    actionState
 }: { 
     children: React.ReactNode, 
     className?: string, 
@@ -32,10 +35,13 @@ function BaseCard({
     priorityScore?: number,
     expiresAt?: number | null,
     relatedTaskId?: string | null,
-    relatedCommitmentId?: string | null
+    relatedCommitmentId?: string | null,
+    cardId?: string,
+    actionState?: { status: 'pending' | 'syncing' | 'synced' | 'error' }
 }) {
     const navigate = useNavigate();
     const [showWhy, setShowWhy] = useState(false);
+    const [isFadingOut, setIsFadingOut] = useState(false);
 
     // Calculate priority border styling (visual only, not displayed)
     const hasExpired = expiresAt && expiresAt < Date.now();
@@ -54,14 +60,57 @@ function BaseCard({
         ? "shadow-sm"
         : "";
 
+    // Action state styling
+    const actionStatus = actionState?.status;
+    const isPending = actionStatus === 'pending';
+    const isSyncing = actionStatus === 'syncing';
+    const isSynced = actionStatus === 'synced';
+
+    // Handle fade out when synced
+    useEffect(() => {
+        if (isSynced && !isFadingOut) {
+            setIsFadingOut(true);
+        }
+    }, [isSynced, isFadingOut]);
+
     return (
         <div className={cn(
-            "relative p-5 rounded-2xl bg-white border transition-all hover:shadow-md",
+            "relative p-5 rounded-2xl bg-white border transition-all",
             className,
             "group",
             priorityBorderClass,
-            priorityShadow
+            priorityShadow,
+            // Action state styling
+            isPending && "opacity-70 border-blue-200",
+            isSyncing && "opacity-80 border-blue-300",
+            isSynced && "opacity-0 -translate-y-2 pointer-events-none transition-all duration-[400ms] ease-out",
+            // Hover only when not in action state
+            !actionStatus && "hover:shadow-md"
         )}>
+            {/* Checkmark when synced */}
+            {isSynced && (
+                <div className="absolute top-4 right-4 z-10">
+                    <div className="w-8 h-8 rounded-full bg-[#34c759] flex items-center justify-center shadow-lg animate-in fade-in zoom-in duration-200">
+                        <CheckCircle2 className="w-5 h-5 text-white" />
+                    </div>
+                </div>
+            )}
+
+            {/* Syncing indicator */}
+            {isSyncing && (
+                <div className="absolute top-4 right-4 z-10">
+                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                    </div>
+                </div>
+            )}
+
+            {/* Pending indicator */}
+            {isPending && (
+                <div className="absolute top-4 right-4 z-10">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                </div>
+            )}
             {/* Why this? button - only show if there's a generation reason */}
             {generationReason && (
                 <button
@@ -136,6 +185,9 @@ function ActionButton({ action, onClick, variant }: { action: string, onClick: (
 }
 
 export function FocusCard({ data, onAction }: CardProps) {
+    const { getActionState } = useActionState();
+    const actionState = getActionState(data.feed_item_id || data.id);
+
     return (
         <BaseCard 
             generationReason={data.generation_reason}
@@ -143,6 +195,8 @@ export function FocusCard({ data, onAction }: CardProps) {
             expiresAt={data.expires_at}
             relatedTaskId={data.related_task_id}
             relatedCommitmentId={data.related_commitment_id}
+            cardId={data.feed_item_id || data.id}
+            actionState={actionState}
         >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
@@ -165,6 +219,8 @@ export function FocusCard({ data, onAction }: CardProps) {
 }
 
 export function TodoLiteCard({ data, onAction }: CardProps) {
+    const { getActionState } = useActionState();
+    const actionState = getActionState(data.feed_item_id || data.id);
     const items = Array.isArray(data.content) ? data.content : [data.content];
 
     return (
@@ -174,6 +230,8 @@ export function TodoLiteCard({ data, onAction }: CardProps) {
             expiresAt={data.expires_at}
             relatedTaskId={data.related_task_id}
             relatedCommitmentId={data.related_commitment_id}
+            cardId={data.feed_item_id || data.id}
+            actionState={actionState}
         >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
@@ -206,6 +264,9 @@ export function TodoLiteCard({ data, onAction }: CardProps) {
 }
 
 export function ReflectionCard({ data, onAction }: CardProps) {
+    const { getActionState } = useActionState();
+    const actionState = getActionState(data.feed_item_id || data.id);
+
     return (
         <BaseCard 
             generationReason={data.generation_reason}
@@ -213,6 +274,8 @@ export function ReflectionCard({ data, onAction }: CardProps) {
             expiresAt={data.expires_at}
             relatedTaskId={data.related_task_id}
             relatedCommitmentId={data.related_commitment_id}
+            cardId={data.feed_item_id || data.id}
+            actionState={actionState}
         >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
@@ -237,6 +300,9 @@ export function ReflectionCard({ data, onAction }: CardProps) {
 }
 
 export function HabitCard({ data, onAction }: CardProps) {
+    const { getActionState } = useActionState();
+    const actionState = getActionState(data.feed_item_id || data.id);
+
     return (
         <BaseCard 
             generationReason={data.generation_reason}
@@ -244,6 +310,8 @@ export function HabitCard({ data, onAction }: CardProps) {
             expiresAt={data.expires_at}
             relatedTaskId={data.related_task_id}
             relatedCommitmentId={data.related_commitment_id}
+            cardId={data.feed_item_id || data.id}
+            actionState={actionState}
         >
             <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 mt-0.5 shadow-sm ring-1 ring-emerald-100/50">
@@ -276,6 +344,8 @@ export function HabitCard({ data, onAction }: CardProps) {
 }
 
 export function GoalCard({ data, onAction }: CardProps) {
+    const { getActionState } = useActionState();
+    const actionState = getActionState(data.feed_item_id || data.id);
     // Check if this is a potential commitment
     const isPotentialCommitment = data.metadata?.is_potential_commitment === true;
     
@@ -286,6 +356,8 @@ export function GoalCard({ data, onAction }: CardProps) {
             expiresAt={data.expires_at}
             relatedTaskId={data.related_task_id}
             relatedCommitmentId={data.related_commitment_id}
+            cardId={data.feed_item_id || data.id}
+            actionState={actionState}
         >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">

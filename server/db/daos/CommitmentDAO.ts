@@ -22,6 +22,21 @@ export interface Commitment {
     time_horizon_value: number | null; // timestamp if type="date"
     cadence_days: number | null; // recurring interval in days (e.g., 7 for weekly)
     check_in_method: string | null; // review | metric | reminder | task_completion
+    // Metrics fields (added for commitment dashboard)
+    health_status: string | null; // 'on_track' | 'drifting' | 'at_risk' | 'behind'
+    streak_count: number | null;
+    longest_streak: number | null;
+    completion_percentage: number | null;
+    days_since_last_progress: number | null;
+    deadline_risk_score: number | null;
+    consistency_score: number | null;
+    momentum_score: number | null;
+    engagement_score: number | null;
+    user_message: string | null;
+    next_step: string | null;
+    detected_blockers: string | null; // JSON array stored as text
+    identity_hint: string | null;
+    last_analyzed_at: number | null;
 }
 
 export interface CreateCommitmentParams {
@@ -143,6 +158,50 @@ export class CommitmentDAO {
         query += ` ORDER BY created_at DESC`;
 
         return this.sql.exec(query, ...params).toArray() as unknown as Commitment[];
+    }
+
+    /**
+     * Update commitment metrics (does not create new version)
+     */
+    updateMetrics(
+        commitmentId: string,
+        userId: string,
+        metrics: {
+            health_status: string;
+            streak_count: number;
+            longest_streak: number | null;
+            completion_percentage: number;
+            days_since_last_progress: number | null;
+            deadline_risk_score: number | null;
+            consistency_score: number;
+            momentum_score: number;
+            engagement_score: number;
+            user_message: string;
+            next_step: string;
+            detected_blockers: string | null; // JSON string
+            identity_hint: string | null;
+            last_analyzed_at: number;
+        }
+    ): void {
+        this.sql.exec(
+            COMMITMENT_QUERIES.UPDATE_METRICS,
+            metrics.health_status,
+            metrics.streak_count,
+            metrics.longest_streak,
+            metrics.completion_percentage,
+            metrics.days_since_last_progress,
+            metrics.deadline_risk_score,
+            metrics.consistency_score,
+            metrics.momentum_score,
+            metrics.engagement_score,
+            metrics.user_message,
+            metrics.next_step,
+            metrics.detected_blockers,
+            metrics.identity_hint,
+            metrics.last_analyzed_at,
+            commitmentId,
+            userId
+        );
     }
 }
 

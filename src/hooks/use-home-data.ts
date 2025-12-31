@@ -151,21 +151,27 @@ function mapFeedItemToCard(item: {
 }
 
 export function useDynamicCards() {
-    const { data: feedItems, isLoading, error } = trpc.feed.getCurrent.useQuery();
+    const { data: feedItems, isRefetching, error } = trpc.feed.getCurrent.useQuery();
+
+    // Emit feed refresh event when feed data changes (new feed generated)
+    // This clears dismissed cards since the new feed won't have acted-upon cards
+    React.useEffect(() => {
+        if (feedItems && feedItems.length > 0) {
+            const feedRefreshEvent = new CustomEvent('feed:refreshed');
+            window.dispatchEvent(feedRefreshEvent);
+        }
+    }, [feedItems]); // Only when feedItems change (new feed generated)
 
     const cards = React.useMemo(() => {
-        if (isLoading) {
-            return [];
-        }
-
-        if (error || !feedItems || (Array.isArray(feedItems) && feedItems.length === 0)) {
+        // Use stale data if available, even if refetching
+        if (!feedItems || (Array.isArray(feedItems) && feedItems.length === 0)) {
             // Return empty array if no feed items
             return [];
         }
 
         // Map feed items to cards
         return feedItems.map(mapFeedItemToCard);
-    }, [feedItems, isLoading, error]);
+    }, [feedItems, error]);
 
-    return { data: cards, isLoading };
+    return { data: cards, isRefetching };
 }

@@ -2,17 +2,33 @@ import React, { useState, useMemo } from 'react';
 import { useDynamicCards, type DynamicCardData } from '../../hooks/use-home-data';
 import { FocusCard, TodoLiteCard, ReflectionCard, HabitCard, GoalCard } from './DynamicCards';
 import { useCapture } from '@/contexts/CaptureContext';
+import { RevalidationIndicator } from '../ui/RevalidationIndicator';
+import { useActionState } from '@/hooks/use-action-state';
 
 export function DynamicCardsZone() {
-    const { data: cards, isLoading } = useDynamicCards();
+    const { data: cards, isRefetching } = useDynamicCards();
     const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
     const { openCapture } = useCapture();
+    const { actionStates, isDismissed } = useActionState();
 
-    // Filter out dismissed cards
+    // Filter out dismissed cards (both local and persistent)
     const visibleCards = useMemo(() => {
         if (!cards || cards.length === 0) return [];
-        return cards.filter(card => !dismissedIds.has(card.id)).slice(0, 6);
-    }, [cards, dismissedIds]);
+        return cards.filter(card => {
+            const cardId = card.feed_item_id || card.id;
+            
+            // Don't show if locally dismissed
+            if (dismissedIds.has(card.id)) return false;
+            
+            // Don't show if persistently dismissed (synced and should stay hidden until feed refresh)
+            if (isDismissed(cardId)) return false;
+            
+            // Show cards that are pending/syncing (they'll show visual feedback)
+            // Synced cards are already filtered above via isDismissed
+            
+            return true;
+        }).slice(0, 6);
+    }, [cards, dismissedIds, isDismissed]);
 
     const handleDismiss = (id: string) => {
         setDismissedIds(prev => new Set([...prev, id]));
@@ -120,28 +136,23 @@ export function DynamicCardsZone() {
         }
     };
 
-    if (isLoading) {
-        return (
-            <div className="text-center py-8 text-zinc-400 text-sm">
-                Loading feed...
-            </div>
-        );
-    }
-
-    if (visibleCards.length === 0) {
-        return (
-            <div className="text-center py-8 text-zinc-400 text-sm">
-                No feed items available. Create a capture to generate your feed.
-            </div>
-        );
-    }
-
     return (
         <div className="w-full px-4 mb-20 space-y-3">
-            {/* Helper title strictly optional/minimal */}
-            {/* <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-2 mb-2">Suggestions</h2> */}
+            {/* Revalidation Indicator */}
+            <div className="flex justify-end mb-2">
+                <RevalidationIndicator isRefetching={isRefetching} />
+            </div>
 
-            {visibleCards.map(card => {
+            {visibleCards.length === 0 ? (
+                <div className="text-center py-8 text-zinc-400 text-sm">
+                    No feed items available. Create a capture to generate your feed.
+                </div>
+            ) : (
+                <>
+                    {/* Helper title strictly optional/minimal */}
+                    {/* <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider px-2 mb-2">Suggestions</h2> */}
+
+                    {visibleCards.map(card => {
                 switch (card.type) {
                     case 'focus': return <FocusCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
                     case 'todo': return <TodoLiteCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
@@ -150,7 +161,9 @@ export function DynamicCardsZone() {
                     case 'goal': return <GoalCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
                     default: return null;
                 }
-            })}
+                    })}
+                </>
+            )}
         </div>
     );
 }

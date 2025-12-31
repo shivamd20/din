@@ -72,8 +72,10 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
                         timeOfDay = 'night';
                     }
                     
+                    // Include all tasks (including completed) for deduplication and suppression
+                    // The feed generator will filter completed tasks as needed
                     return {
-                        tasks,
+                        tasks, // Includes both active and completed tasks
                         commitments,
                         signals,
                         timeOfDay
@@ -90,15 +92,62 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
             );
 
             // Step 5: Generate feed with LLM (Anthropic with prompt caching)
-            const { items, metrics } = await step.do(
+            const { items, metrics, commitment_updates } = await step.do(
                 "generate-feed",
                 async () => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    return await generateFeed(promptStructure, this.env as any);
+                    return await generateFeed(promptStructure, this.env as any, entityContext, currentTime);
                 }
             );
 
-            // Step 6: Persist feed and update last_processed_entry_id
+            // Step 6: Process commitment updates and auto-completions
+            if (commitment_updates && commitment_updates.length > 0) {
+                await step.do(
+                    "update-commitment-metrics",
+                    async () => {
+                        const userDO = this.env.USER_DO.get(
+                            this.env.USER_DO.idFromName(userId)
+                        );
+                        
+                        for (const update of commitment_updates) {
+                            try {
+                                // Update metrics
+                                await userDO.updateCommitmentMetrics(userId, update.commitment_id, {
+                                    health_status: update.status,
+                                    streak_count: update.streak_count,
+                                    longest_streak: update.longest_streak ?? null,
+                                    completion_percentage: update.completion_percentage,
+                                    days_since_last_progress: update.days_since_last_progress ?? null,
+                                    deadline_risk_score: update.deadline_risk_score ?? null,
+                                    consistency_score: update.consistency_score,
+                                    momentum_score: update.momentum_score,
+                                    engagement_score: update.engagement_score,
+                                    user_message: update.user_message,
+                                    next_step: update.next_step,
+                                    detected_blockers: update.detected_blockers ?? null,
+                                    identity_hint: update.identity_hint ?? null
+                                });
+                                
+                                // Auto-complete if detected
+                                if (update.should_complete) {
+                                    // Create a capture entry documenting the completion
+                                    const completionText = `Completed commitment: ${update.user_message || 'Goal achieved'}`;
+                                    await userDO.addEntry(userId, completionText, 'system', {
+                                        eventType: 'commitment_complete',
+                                        linkedCommitmentId: update.commitment_id
+                                    });
+                                    console.log(`[FeedWorkflow] Auto-completed commitment ${update.commitment_id} for user ${userId}`);
+                                }
+                            } catch (error) {
+                                console.error(`[FeedWorkflow] Failed to update metrics for commitment ${update.commitment_id}:`, error);
+                                // Continue with other updates even if one fails
+                            }
+                        }
+                    }
+                );
+            }
+
+            // Step 7: Persist feed and update last_processed_entry_id
             await step.do(
                 "persist-feed",
                 async () => {
@@ -119,7 +168,7 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
                 }
             );
 
-            console.log(`[FeedWorkflow] Generated feed for user ${userId}, ${items.length} items, cache hit rate: ${(metrics.cache_hit_rate * 100).toFixed(1)}%`);
+            console.log(`[FeedWorkflow] Generated feed for user ${userId}, ${items.length} items, ${commitment_updates?.length || 0} commitment updates, cache hit rate: ${(metrics.cache_hit_rate * 100).toFixed(1)}%`);
 
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);

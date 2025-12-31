@@ -18,6 +18,12 @@ export async function syncQueue() {
         // Process serially to maintain order if that matters (FIFO)
         for (const entry of unsynced) {
             try {
+                // Emit sync start event
+                const syncStartEvent = new CustomEvent('sync:start', {
+                    detail: { entryId: entry.id }
+                });
+                window.dispatchEvent(syncStartEvent);
+
                 const attachments = entry.attachments || [];
                 let hasPendingUploads = false;
 
@@ -102,9 +108,21 @@ export async function syncQueue() {
                 }
 
                 await db.entries.update(entry.id, updates);
+
+                // Emit sync complete event
+                const syncCompleteEvent = new CustomEvent('sync:complete', {
+                    detail: { entryId: entry.id }
+                });
+                window.dispatchEvent(syncCompleteEvent);
             } catch (err) {
                 console.error("Sync failed for entry", entry.id, err);
                 // Keep synced=0, will retry next time
+                
+                // Emit sync error event
+                const syncErrorEvent = new CustomEvent('sync:error', {
+                    detail: { entryId: entry.id }
+                });
+                window.dispatchEvent(syncErrorEvent);
             }
         }
     } catch (error) {

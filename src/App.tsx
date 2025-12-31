@@ -81,6 +81,7 @@ import HomePage from './components/HomePage';
 import AuthCallbackHandler from './components/AuthCallbackHandler';
 import TasksPage from './components/TasksPage';
 import CommitmentsPage from './components/CommitmentsPage';
+import CommitmentDetailPage from './components/CommitmentDetailPage';
 import { CaptureProvider } from './contexts/CaptureContext';
 import { CaptureBox } from './components/features/CaptureBox';
 import { UndoProvider } from './hooks/use-undo';
@@ -101,6 +102,7 @@ export default function App() {
                   <Route path="/chat" element={<ReflectChat />} />
                   <Route path="/tasks" element={<TasksPage />} />
                   <Route path="/commitments" element={<CommitmentsPage />} />
+                  <Route path="/commitments/:commitmentId" element={<CommitmentDetailPage />} />
                   {/* Hidden behind hamburger menu */}
                   <Route path="/timeline" element={<TimelinePage />} />
                 </Route>

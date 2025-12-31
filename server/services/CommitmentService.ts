@@ -191,10 +191,10 @@ export class CommitmentService {
         // Validate state transitions
         const validTransitions: Record<string, string[]> = {
             "confirmed": ["active", "retired"],
-            "active": ["completed", "retired", "renegotiated"],
+            "active": ["completed", "retired", "active"], // active can transition to active (renegotiation)
             "completed": [], // Terminal state
             "retired": [], // Terminal state
-            "renegotiated": ["active", "completed", "retired"]
+            "renegotiated": ["active"] // Legacy: renegotiated can become active (shouldn't happen with new flow)
         };
 
         const allowedStatuses = validTransitions[currentCommitment.status] || [];
@@ -240,6 +240,56 @@ export class CommitmentService {
     getCommitmentById(userId: string, commitmentId: string): Commitment | undefined {
         const commitments = this.commitmentDAO.get(userId, {});
         return commitments.find(c => c.id === commitmentId);
+    }
+
+    /**
+     * Update commitment metrics (does not create new version)
+     * Called after feed generation to update LLM-computed metrics
+     */
+    updateCommitmentMetrics(
+        userId: string,
+        commitmentId: string,
+        metrics: {
+            health_status: string;
+            streak_count: number;
+            longest_streak: number | null;
+            completion_percentage: number;
+            days_since_last_progress: number | null;
+            deadline_risk_score: number | null;
+            consistency_score: number;
+            momentum_score: number;
+            engagement_score: number;
+            user_message: string;
+            next_step: string;
+            detected_blockers: string[] | null;
+            identity_hint: string | null;
+        }
+    ): void {
+        // Serialize detected_blockers array to JSON string
+        const blockersJson = metrics.detected_blockers 
+            ? JSON.stringify(metrics.detected_blockers)
+            : null;
+
+        this.commitmentDAO.updateMetrics(
+            commitmentId,
+            userId,
+            {
+                health_status: metrics.health_status,
+                streak_count: metrics.streak_count,
+                longest_streak: metrics.longest_streak,
+                completion_percentage: metrics.completion_percentage,
+                days_since_last_progress: metrics.days_since_last_progress,
+                deadline_risk_score: metrics.deadline_risk_score,
+                consistency_score: metrics.consistency_score,
+                momentum_score: metrics.momentum_score,
+                engagement_score: metrics.engagement_score,
+                user_message: metrics.user_message,
+                next_step: metrics.next_step,
+                detected_blockers: blockersJson,
+                identity_hint: metrics.identity_hint,
+                last_analyzed_at: Date.now()
+            }
+        );
     }
 }
 

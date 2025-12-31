@@ -1,9 +1,10 @@
 import { chat } from '@tanstack/ai';
 import { AIModel } from './ai-model';
-import type { PromptStructure } from './prompt-builder';
+import type { PromptStructure, EntityContext } from './prompt-builder';
 import { trackCacheMetrics, type CacheMetrics } from './cache-metrics';
 import { z } from 'zod';
 import type { FeedItemRendered } from './UserDO';
+import type { Task } from './db/daos';
 
 // Zod schema matching FROZEN_OUTPUT_SCHEMA
 const FeedOutputSchema = z.object({
@@ -46,7 +47,31 @@ const FeedOutputSchema = z.object({
     priority_score: z.number().min(0).max(1).optional(),
     expires_at: z.number().nullable().optional(),
     created_at: z.number().optional()
-  }))
+  })),
+  commitment_updates: z.array(z.object({
+    commitment_id: z.string(),
+    status: z.enum(['on_track', 'drifting', 'at_risk', 'behind']),
+    streak_count: z.number(),
+    longest_streak: z.number().optional(),
+    streak_message: z.string(),
+    completion_percentage: z.number().min(0).max(100),
+    days_since_last_progress: z.number().optional(),
+    deadline_risk_score: z.number().min(0).max(1).optional(),
+    consistency_score: z.number().min(0).max(1),
+    momentum_score: z.number().min(0).max(1),
+    engagement_score: z.number().min(0).max(1),
+    user_message: z.string(),
+    next_step: z.string(),
+    health_scores: z.object({
+      consistency: z.number().min(0).max(1),
+      momentum: z.number().min(0).max(1),
+      deadline_risk: z.number().min(0).max(1).optional(),
+      engagement: z.number().min(0).max(1)
+    }),
+    detected_blockers: z.array(z.string()).optional(),
+    identity_hint: z.string().optional(),
+    should_complete: z.boolean().optional()
+  })).optional()
 });
 
 type FeedOutput = z.infer<typeof FeedOutputSchema>;
@@ -81,6 +106,162 @@ export interface FeedItem {
 }
 
 /**
+ * Normalize content for comparison (lowercase, trim, remove extra spaces)
+ */
+function normalizeContent(content: string): string {
+  return content.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Check if two task contents are semantically similar (70%+ similarity)
+ * Simple implementation: check if normalized content is very similar
+ */
+function isSimilarContent(content1: string, content2: string): boolean {
+  const norm1 = normalizeContent(content1);
+  const norm2 = normalizeContent(content2);
+  
+  // Exact match after normalization
+  if (norm1 === norm2) return true;
+  
+  // Check if one contains the other (for partial matches)
+  if (norm1.length > 0 && norm2.length > 0) {
+    const longer = norm1.length > norm2.length ? norm1 : norm2;
+    const shorter = norm1.length > norm2.length ? norm2 : norm1;
+    
+    // If shorter is at least 70% of longer and is contained, consider similar
+    if (shorter.length >= longer.length * 0.7 && longer.includes(shorter)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Deduplicate tasks based on commitment references and content matches
+ */
+function deduplicateTasks(
+  items: FeedOutput['items'],
+  activeTasks: Task[]
+): FeedOutput['items'] {
+  const taskItems = items.filter(item => item.type === 'task');
+  const otherItems = items.filter(item => item.type !== 'task');
+  
+  const seenCommitments = new Set<string>();
+  const seenContents = new Set<string>();
+  const deduplicatedTasks: FeedOutput['items'] = [];
+  
+  for (const item of taskItems) {
+    // Check commitment reference deduplication
+    if (item.related_commitment_id) {
+      // Check if task for this commitment already exists in active tasks
+      const existingTaskForCommitment = activeTasks.find(
+        t => t.commitment_id === item.related_commitment_id && t.status !== 'completed'
+      );
+      
+      if (existingTaskForCommitment) {
+        // Skip - task for this commitment already exists
+        continue;
+      }
+      
+      // Check if we've already generated a task for this commitment in this batch
+      if (seenCommitments.has(item.related_commitment_id)) {
+        continue;
+      }
+      seenCommitments.add(item.related_commitment_id);
+    }
+    
+    // Check exact content match
+    const normalizedContent = normalizeContent(item.phrasing);
+    if (seenContents.has(normalizedContent)) {
+      continue;
+    }
+    
+    // Check against active tasks
+    const exactMatch = activeTasks.some(
+      t => normalizeContent(t.content) === normalizedContent && t.status !== 'completed'
+    );
+    if (exactMatch) {
+      continue;
+    }
+    
+    // Check semantic similarity against active tasks
+    const similarMatch = activeTasks.some(
+      t => t.status !== 'completed' && isSimilarContent(t.content, item.phrasing)
+    );
+    if (similarMatch) {
+      continue;
+    }
+    
+    seenContents.add(normalizedContent);
+    deduplicatedTasks.push(item);
+  }
+  
+  return [...otherItems, ...deduplicatedTasks];
+}
+
+/**
+ * Apply context-aware suppression rules
+ */
+function applySuppression(
+  items: FeedOutput['items'],
+  entityContext: EntityContext | undefined,
+  currentTime: number
+): FeedOutput['items'] {
+  const hour = new Date(currentTime).getHours();
+  const isMorning = hour >= 5 && hour < 12;
+  const isEvening = hour >= 17 && hour < 21;
+  const energyLevel = entityContext?.energyLevel ?? 0.5;
+  
+  // Get completed tasks in last 2 hours for recent activity suppression
+  const twoHoursAgo = currentTime - (2 * 60 * 60 * 1000);
+  const recentCompletedTasks = entityContext?.tasks?.filter(
+    t => t.status === 'completed' && t.created_at >= twoHoursAgo
+  ) ?? [];
+  
+  const filtered = items.filter(item => {
+    // Time-based suppression
+    if (item.context?.time_of_day) {
+      const taskTimeOfDay = item.context.time_of_day.toLowerCase();
+      if (isMorning && (taskTimeOfDay.includes('evening') || taskTimeOfDay.includes('night'))) {
+        return false; // Suppress evening tasks in morning
+      }
+      if (isEvening && (taskTimeOfDay.includes('morning') || taskTimeOfDay.includes('early'))) {
+        return false; // Suppress morning tasks in evening
+      }
+    }
+    
+    // Energy-based suppression
+    if (item.urgency > 0.7 && energyLevel < 0.4) {
+      return false; // Suppress high-energy tasks when energy is low
+    }
+    
+    // Recent activity suppression
+    const itemContent = normalizeContent(item.phrasing);
+    const recentlyCompleted = recentCompletedTasks.some(
+      t => isSimilarContent(t.content, itemContent)
+    );
+    if (recentlyCompleted) {
+      return false; // Suppress if similar task completed recently
+    }
+    
+    return true;
+  });
+  
+  // Overwhelm detection: if >5 items, suppress items with priority_score < 0.5
+  if (filtered.length > 5) {
+    return filtered
+      .filter(item => {
+        const priorityScore = item.priority_score ?? (item.urgency * item.importance);
+        return priorityScore >= 0.5;
+      })
+      .slice(0, 7); // Max 7 items
+  }
+  
+  return filtered;
+}
+
+/**
  * Generate feed using unified chat infrastructure with structured output
  */
 export async function generateFeed(
@@ -88,8 +269,10 @@ export async function generateFeed(
   env: Env & { 
     ANTHROPIC_API_KEY?: SecretsStoreSecret | string;
     GEMINI_API_KEY?: SecretsStoreSecret | string;
-  }
-): Promise<{ items: FeedItemRendered[]; metrics: CacheMetrics }> {
+  },
+  entityContext?: EntityContext,
+  currentTime?: number
+): Promise<{ items: FeedItemRendered[]; metrics: CacheMetrics; commitment_updates?: FeedOutput['commitment_updates'] }> {
   const startTime = Date.now();
   const aiModel = new AIModel(env);
   const adapter = await aiModel.getAdapter();
@@ -135,11 +318,11 @@ export async function generateFeed(
   // When using outputSchema, chat returns the structured data directly
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const feedOutput = result as any as FeedOutput;
-  const now = Date.now();
+  const now = currentTime ?? Date.now();
   
-  // Deduplicate potential commitments by deduplication_key
+  // Step 1: Deduplicate potential commitments by deduplication_key
   const potentialCommitmentsMap = new Map<string, typeof feedOutput.items[0]>();
-  const otherItems: typeof feedOutput.items = [];
+  const nonPotentialCommitmentItems: typeof feedOutput.items = [];
   
   feedOutput.items.forEach(item => {
     if (item.type === "potential_commitment") {
@@ -154,14 +337,28 @@ export async function generateFeed(
         potentialCommitmentsMap.set(deduplicationKey, item);
       }
     } else {
-      otherItems.push(item);
+      nonPotentialCommitmentItems.push(item);
     }
   });
   
-  // Combine deduplicated potential commitments with other items
-  const deduplicatedItems = [...Array.from(potentialCommitmentsMap.values()), ...otherItems];
+  // Step 2: Deduplicate tasks based on commitment references and content matches
+  const activeTasks = entityContext?.tasks?.filter(t => t.status !== 'completed') ?? [];
+  const deduplicatedTasks = deduplicateTasks(nonPotentialCommitmentItems, activeTasks);
   
-  const items: FeedItemRendered[] = deduplicatedItems.map(item => {
+  // Step 3: Combine deduplicated potential commitments with deduplicated tasks
+  const deduplicatedItems = [...Array.from(potentialCommitmentsMap.values()), ...deduplicatedTasks];
+  
+  // Step 4: Apply context-aware suppression rules
+  const suppressedItems = applySuppression(deduplicatedItems, entityContext, now);
+  
+  // Step 5: Sort by priority score (highest first)
+  const sortedItems = suppressedItems.sort((a, b) => {
+    const scoreA = a.priority_score ?? (a.urgency * a.importance);
+    const scoreB = b.priority_score ?? (b.urgency * b.importance);
+    return scoreB - scoreA;
+  });
+  
+  const items: FeedItemRendered[] = sortedItems.map(item => {
     // Calculate priority_score if not provided (composite of urgency × importance)
     const priorityScore = item.priority_score ?? (item.urgency * item.importance);
     
@@ -205,6 +402,10 @@ export async function generateFeed(
     };
   });
   
-  return { items, metrics };
+  return { 
+    items, 
+    metrics,
+    commitment_updates: feedOutput.commitment_updates
+  };
 }
 

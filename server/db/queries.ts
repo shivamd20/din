@@ -171,6 +171,24 @@ export const MIGRATION_QUERIES = {
     ADD_FEED_SNAPSHOTS_COLUMNS: `
         -- Similar approach for feed_snapshots
     `,
+
+    // Add commitment metrics columns
+    ADD_COMMITMENT_METRICS_COLUMNS: `
+        ALTER TABLE commitments ADD COLUMN health_status TEXT;
+        ALTER TABLE commitments ADD COLUMN streak_count INTEGER DEFAULT 0;
+        ALTER TABLE commitments ADD COLUMN longest_streak INTEGER DEFAULT 0;
+        ALTER TABLE commitments ADD COLUMN completion_percentage REAL DEFAULT 0.0;
+        ALTER TABLE commitments ADD COLUMN days_since_last_progress INTEGER;
+        ALTER TABLE commitments ADD COLUMN deadline_risk_score REAL;
+        ALTER TABLE commitments ADD COLUMN consistency_score REAL DEFAULT 0.0;
+        ALTER TABLE commitments ADD COLUMN momentum_score REAL DEFAULT 0.0;
+        ALTER TABLE commitments ADD COLUMN engagement_score REAL DEFAULT 0.0;
+        ALTER TABLE commitments ADD COLUMN user_message TEXT;
+        ALTER TABLE commitments ADD COLUMN next_step TEXT;
+        ALTER TABLE commitments ADD COLUMN detected_blockers TEXT;
+        ALTER TABLE commitments ADD COLUMN identity_hint TEXT;
+        ALTER TABLE commitments ADD COLUMN last_analyzed_at INTEGER;
+    `,
 };
 
 // ============================================================================
@@ -277,6 +295,25 @@ export const COMMITMENT_QUERIES = {
         ) c2 ON c1.origin_entry_id = c2.origin_entry_id 
             AND c1.version = c2.max_version
         WHERE c1.user_id = ?
+    `,
+
+    UPDATE_METRICS: `
+        UPDATE commitments SET
+            health_status = ?,
+            streak_count = ?,
+            longest_streak = ?,
+            completion_percentage = ?,
+            days_since_last_progress = ?,
+            deadline_risk_score = ?,
+            consistency_score = ?,
+            momentum_score = ?,
+            engagement_score = ?,
+            user_message = ?,
+            next_step = ?,
+            detected_blockers = ?,
+            identity_hint = ?,
+            last_analyzed_at = ?
+        WHERE id = ? AND user_id = ?
     `,
 };
 

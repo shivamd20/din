@@ -17,6 +17,9 @@ import {
     CommitmentService,
     TaskService,
     FeedService,
+    TimelineService,
+    type TimelineData,
+    type TimelineFilters,
 } from "./services";
 
 // ============================================================================
@@ -85,6 +88,7 @@ export class UserDO extends DurableObject<Env> {
     private commitmentService: CommitmentService;
     private taskService: TaskService;
     private feedService: FeedService;
+    private timelineService: TimelineService;
     private aiServicePromise: Promise<import('./ai-service').AIService> | null = null;
 
     constructor(state: DurableObjectState, env: Env) {
@@ -110,6 +114,7 @@ export class UserDO extends DurableObject<Env> {
         this.commitmentService = new CommitmentService(this.commitmentDAO, undefined);
         this.taskService = new TaskService(this.taskDAO);
         this.feedService = new FeedService(this.feedDAO);
+        this.timelineService = new TimelineService();
 
         this.initializeSchema();
     }
@@ -145,6 +150,21 @@ export class UserDO extends DurableObject<Env> {
             { table: 'commitments', column: 'time_horizon_value', type: 'INTEGER' },
             { table: 'commitments', column: 'cadence_days', type: 'INTEGER' },
             { table: 'commitments', column: 'check_in_method', type: 'TEXT' },
+            // Commitment metrics columns
+            { table: 'commitments', column: 'health_status', type: 'TEXT' },
+            { table: 'commitments', column: 'streak_count', type: 'INTEGER' },
+            { table: 'commitments', column: 'longest_streak', type: 'INTEGER' },
+            { table: 'commitments', column: 'completion_percentage', type: 'REAL' },
+            { table: 'commitments', column: 'days_since_last_progress', type: 'INTEGER' },
+            { table: 'commitments', column: 'deadline_risk_score', type: 'REAL' },
+            { table: 'commitments', column: 'consistency_score', type: 'REAL' },
+            { table: 'commitments', column: 'momentum_score', type: 'REAL' },
+            { table: 'commitments', column: 'engagement_score', type: 'REAL' },
+            { table: 'commitments', column: 'user_message', type: 'TEXT' },
+            { table: 'commitments', column: 'next_step', type: 'TEXT' },
+            { table: 'commitments', column: 'detected_blockers', type: 'TEXT' },
+            { table: 'commitments', column: 'identity_hint', type: 'TEXT' },
+            { table: 'commitments', column: 'last_analyzed_at', type: 'INTEGER' },
         ];
 
         for (const migration of migrations) {
@@ -275,6 +295,7 @@ export class UserDO extends DurableObject<Env> {
                                 ? parsed.time_horizon_value
                                 : currentCommitment.expires_at;
 
+                            // Create new version with updated fields, automatically set to active
                             const params: import('./db/daos/CommitmentDAO').CreateCommitmentParams = {
                                 id: crypto.randomUUID(),
                                 userId,
@@ -282,14 +303,14 @@ export class UserDO extends DurableObject<Env> {
                                 content: updatedContent,
                                 strength: parsed.strength || currentCommitment.strength,
                                 horizon: parsed.horizon || currentCommitment.horizon,
-                                status: 'renegotiated', // Mark as renegotiated
+                                status: 'active', // Automatically activate after renegotiation
                                 createdAt: now,
                                 expiresAt: updatedExpiresAt,
-                                lastAcknowledgedAt: currentCommitment.last_acknowledged_at,
+                                lastAcknowledgedAt: now, // Update acknowledgment time
                                 progressScore: currentCommitment.progress_score,
                                 sourceType: currentCommitment.source_type,
                                 version: newVersion,
-                                triggerCaptureId: currentCommitment.trigger_capture_id,
+                                triggerCaptureId: entryId, // Use the renegotiation capture as trigger
                                 sourceWindowDays: currentCommitment.source_window_days,
                                 llmRunId: currentCommitment.llm_run_id,
                                 confirmedAt: currentCommitment.confirmed_at,
@@ -300,7 +321,7 @@ export class UserDO extends DurableObject<Env> {
                             };
 
                             this.commitmentDAO.create(params);
-                            console.log(`[UserDO] Renegotiated commitment ${opts.linkedCommitmentId} for user ${userId}`);
+                            console.log(`[UserDO] Renegotiated and activated commitment ${opts.linkedCommitmentId} for user ${userId}`);
                         }
                     } catch (err: unknown) {
                         console.error(`[UserDO] Failed to renegotiate commitment:`, err);
@@ -437,6 +458,28 @@ export class UserDO extends DurableObject<Env> {
         return this.commitmentService.getCommitments(userId, options);
     }
 
+    async updateCommitmentMetrics(
+        userId: string,
+        commitmentId: string,
+        metrics: {
+            health_status: string;
+            streak_count: number;
+            longest_streak: number | null;
+            completion_percentage: number;
+            days_since_last_progress: number | null;
+            deadline_risk_score: number | null;
+            consistency_score: number;
+            momentum_score: number;
+            engagement_score: number;
+            user_message: string;
+            next_step: string;
+            detected_blockers: string[] | null;
+            identity_hint: string | null;
+        }
+    ): Promise<void> {
+        this.commitmentService.updateCommitmentMetrics(userId, commitmentId, metrics);
+    }
+
     async addCommitmentsBatch(
         userId: string,
         commitments: Array<{
@@ -472,6 +515,27 @@ export class UserDO extends DurableObject<Env> {
         }
     ): Promise<Task[]> {
         return this.taskService.getTasks(userId, options);
+    }
+
+    async getTimeline(
+        userId: string,
+        filters?: TimelineFilters
+    ): Promise<TimelineData> {
+        // Fetch all required data
+        const allTasks = this.taskService.getTasks(userId, { include_history: true });
+        const allCommitments = this.commitmentService.getCommitments(userId, { include_history: false });
+        const allEntries = this.entryService.getAllEntries(userId);
+        const currentFeed = this.feedService.getCurrentFeed(userId);
+
+        // Build timeline using service
+        return this.timelineService.buildTimeline(
+            userId,
+            allTasks,
+            allCommitments,
+            allEntries,
+            currentFeed,
+            filters
+        );
     }
 
     async addTasksBatch(

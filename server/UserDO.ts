@@ -5,6 +5,8 @@ import {
     CommitmentDAO,
     TaskDAO,
     FeedDAO,
+    ChatDAO,
+    ChatMessageDAO,
     type Commitment,
     type Task,
 } from "./db/daos";
@@ -14,6 +16,7 @@ import {
     TaskService,
     FeedService,
     TimelineService,
+    ChatService,
     type TimelineData,
     type TimelineFilters,
 } from "./services";
@@ -74,6 +77,8 @@ export class UserDO extends DurableObject<Env> {
     private commitmentDAO: CommitmentDAO;
     private taskDAO: TaskDAO;
     private feedDAO: FeedDAO;
+    private chatDAO: ChatDAO;
+    private chatMessageDAO: ChatMessageDAO;
     
     // Services
     private entryService: EntryService;
@@ -81,6 +86,7 @@ export class UserDO extends DurableObject<Env> {
     private taskService: TaskService;
     private feedService: FeedService;
     private timelineService: TimelineService;
+    private chatService: ChatService;
     private aiServicePromise: Promise<import('./ai-service').AIService> | null = null;
 
     constructor(state: DurableObjectState, env: Env) {
@@ -93,6 +99,8 @@ export class UserDO extends DurableObject<Env> {
         this.commitmentDAO = new CommitmentDAO(this.sql);
         this.taskDAO = new TaskDAO(this.sql);
         this.feedDAO = new FeedDAO(this.sql);
+        this.chatDAO = new ChatDAO(this.sql);
+        this.chatMessageDAO = new ChatMessageDAO(this.sql);
 
         // Initialize Services
         this.entryService = new EntryService(this.entryDAO);
@@ -105,6 +113,7 @@ export class UserDO extends DurableObject<Env> {
         this.taskService = new TaskService(this.taskDAO);
         this.feedService = new FeedService(this.feedDAO);
         this.timelineService = new TimelineService();
+        this.chatService = new ChatService(this.chatDAO, this.chatMessageDAO);
 
         this.initializeSchema();
     }
@@ -116,6 +125,8 @@ export class UserDO extends DurableObject<Env> {
         this.sql.exec(SCHEMA_QUERIES.FEED_SNAPSHOTS_TABLE);
         this.sql.exec(SCHEMA_QUERIES.PLANNER_STATE_TABLE);
         this.sql.exec(SCHEMA_QUERIES.EVENTS_TABLE);
+        this.sql.exec(SCHEMA_QUERIES.CHATS_TABLE);
+        this.sql.exec(SCHEMA_QUERIES.CHAT_MESSAGES_TABLE);
         
         // Run migrations to add new columns to existing tables
         this.runMigrations();
@@ -891,6 +902,50 @@ export class UserDO extends DurableObject<Env> {
 
         // Note: We don't delete the capture entry - it remains in history
         // The state change is reverted by creating a new version with previous status
+    }
+
+    // ========================================================================
+    // Chat Methods - Direct RPC (for tRPC and Chat API)
+    // ========================================================================
+
+    async getChats(userId: string): Promise<Array<{ id: string; title: string; created_at: number; updated_at: number }>> {
+        return this.chatService.listChats(userId);
+    }
+
+    async getChat(userId: string, chatId: string): Promise<{ 
+        chat: { id: string; user_id: string; title: string; created_at: number; updated_at: number }; 
+        messages: Array<{ id: string; role: string; parts: unknown[]; createdAt: number }> 
+    } | null> {
+        return this.chatService.getChatWithMessages(chatId, userId);
+    }
+
+    async createChat(userId: string, firstUserMessage?: string): Promise<string> {
+        return this.chatService.createChat(userId, firstUserMessage);
+    }
+
+    async updateChatTitle(userId: string, chatId: string, title: string): Promise<void> {
+        this.chatService.updateChatTitle(chatId, userId, title);
+    }
+
+    async deleteChat(userId: string, chatId: string): Promise<void> {
+        this.chatService.deleteChat(chatId, userId);
+    }
+
+    async saveChatMessage(
+        userId: string,
+        chatId: string,
+        role: 'user' | 'assistant',
+        parts: Array<{ type: string; [key: string]: unknown }>
+    ): Promise<string> {
+        return this.chatService.saveMessage(chatId, userId, role, parts);
+    }
+
+    async saveChatMessages(
+        userId: string,
+        chatId: string,
+        messages: Array<{ role: 'user' | 'assistant'; parts: Array<{ type: string; [key: string]: unknown }> }>
+    ): Promise<void> {
+        this.chatService.saveMessages(chatId, userId, messages);
     }
 
     // ========================================================================

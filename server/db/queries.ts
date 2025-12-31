@@ -130,6 +130,31 @@ export const SCHEMA_QUERIES = {
         CREATE INDEX IF NOT EXISTS idx_events_capture ON events(capture_id);
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
     `,
+
+    CHATS_TABLE: `
+        CREATE TABLE IF NOT EXISTS chats (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_chats_user ON chats(user_id, updated_at DESC);
+    `,
+
+    CHAT_MESSAGES_TABLE: `
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id TEXT PRIMARY KEY,
+            chat_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_chat ON chat_messages(chat_id, created_at ASC);
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages(user_id);
+    `,
 };
 
 // ============================================================================
@@ -334,5 +359,57 @@ export const FEED_QUERIES = {
         ORDER BY feed_version DESC
         LIMIT 1
     `,
+};
+
+// ============================================================================
+// Chat Queries
+// ============================================================================
+
+export const CHAT_QUERIES = {
+    INSERT: `
+        INSERT INTO chats (id, user_id, title, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+    `,
+
+    GET_BY_ID: `SELECT * FROM chats WHERE id = ? AND user_id = ?`,
+
+    LIST_BY_USER: `
+        SELECT * FROM chats
+        WHERE user_id = ?
+        ORDER BY updated_at DESC
+    `,
+
+    UPDATE_TITLE: `
+        UPDATE chats SET title = ?, updated_at = ?
+        WHERE id = ? AND user_id = ?
+    `,
+
+    UPDATE_UPDATED_AT: `
+        UPDATE chats SET updated_at = ?
+        WHERE id = ? AND user_id = ?
+    `,
+
+    DELETE: `DELETE FROM chats WHERE id = ? AND user_id = ?`,
+};
+
+// ============================================================================
+// Chat Message Queries
+// ============================================================================
+
+export const CHAT_MESSAGE_QUERIES = {
+    INSERT: `
+        INSERT INTO chat_messages (id, chat_id, user_id, role, content_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `,
+
+    GET_BY_CHAT_ID: `
+        SELECT * FROM chat_messages
+        WHERE chat_id = ?
+        ORDER BY created_at ASC
+    `,
+
+    DELETE_BY_CHAT_ID: `DELETE FROM chat_messages WHERE chat_id = ?`,
+
+    DELETE_BY_ID: `DELETE FROM chat_messages WHERE id = ? AND chat_id = ?`,
 };
 

@@ -1,15 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useChat as useTanstackChat } from '@tanstack/ai-react';
 import { fetchServerSentEvents } from '@tanstack/ai-client';
-import { SendHorizontal, Sparkles, Wrench } from 'lucide-react';
+import { SendHorizontal, Sparkles, Wrench, ChevronDown, Plus, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EntryCard, TaskCard, CommitmentCard } from './chat';
 import MDEditor from '@uiw/react-md-editor';
+import { trpc } from '@/lib/trpc';
 
 export default function ReflectChat() {
     const [input, setInput] = useState('');
+    const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+    const [showChatDropdown, setShowChatDropdown] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Fetch chat list
+    const { data: chats = [], refetch: refetchChats } = trpc.chats.list.useQuery();
+
+    // Fetch current chat messages if chatId is set
+    const { data: currentChatData } = trpc.chats.get.useQuery(
+        { chatId: currentChatId! },
+        { enabled: !!currentChatId }
+    ) as { data?: { chat: { id: string; title: string; created_at: number; updated_at: number }; messages: Array<{ id: string; role: string; parts: unknown[]; createdAt: number }> } | null };
+
+    // Create chat mutation
+    const createChatMutation = trpc.chats.create.useMutation({
+        onSuccess: (data) => {
+            setCurrentChatId(data.chatId);
+            refetchChats();
+        },
+    });
 
     const connection = fetchServerSentEvents('/api/chat', {
         body: (messages: Array<{ role: 'user' | 'assistant'; parts: Array<{ type: string; [key: string]: unknown }> }>) => {
@@ -27,6 +48,7 @@ export default function ReflectChat() {
 
             return JSON.stringify({
                 messages: serverMessages,
+                chatId: currentChatId || undefined,
             });
         },
         headers: {
@@ -38,11 +60,58 @@ export default function ReflectChat() {
         messages,
         sendMessage,
         isLoading,
-        error,
+        setMessages,
     } = useTanstackChat({
         connection,
         onError: (e: Error) => console.error('Chat error:', e),
+        onFinish: () => {
+            // Refetch chats after message completes to get updated titles
+            refetchChats();
+        },
     });
+
+    // Load chat messages when chat is selected
+    useEffect(() => {
+        if (currentChatData && currentChatData.messages && Array.isArray(currentChatData.messages)) {
+            // Convert saved messages to TanStack format
+            const tanstackMessages = currentChatData.messages.map((msg) => ({
+                id: msg.id,
+                role: msg.role as 'user' | 'assistant',
+                parts: (msg.parts || []) as Array<{ type: string; [key: string]: unknown }>,
+            }));
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setMessages(tanstackMessages as any);
+        } else if (currentChatId === null) {
+            // Clear messages when no chat selected
+            setMessages([]);
+        }
+    }, [currentChatData, currentChatId, setMessages]);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowChatDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleNewChat = () => {
+        setCurrentChatId(null);
+        setMessages([]);
+        setShowChatDropdown(false);
+        inputRef.current?.focus();
+    };
+
+    const handleSelectChat = (chatId: string) => {
+        setCurrentChatId(chatId);
+        setShowChatDropdown(false);
+    };
+
+    const currentChat = chats.find(c => c.id === currentChatId);
+    const chatTitle = currentChat?.title || 'New Chat';
 
     // Auto-scroll
     useEffect(() => {
@@ -60,19 +129,87 @@ export default function ReflectChat() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             if (!input.trim() || isLoading) return;
-            sendMessage(input);
-            setInput('');
+            handleSend();
         }
     };
 
-    const handleSend = () => {
+    const handleSend = async () => {
         if (!input.trim() || isLoading) return;
+        
+        // Create new chat if we don't have one
+        if (!currentChatId) {
+            const result = await createChatMutation.mutateAsync({ firstUserMessage: input });
+            setCurrentChatId(result.chatId);
+        }
+        
         sendMessage(input);
         setInput('');
     };
 
     return (
         <div className="flex flex-col flex-1 w-full relative bg-zinc-50/30 overflow-hidden" data-color-mode="light">
+            {/* Chat Header with Dropdown */}
+            <div className="px-4 py-3 bg-white/95 backdrop-blur-xl border-b border-zinc-100/80 flex items-center justify-between">
+                <div className="relative" ref={dropdownRef}>
+                    <button
+                        onClick={() => setShowChatDropdown(!showChatDropdown)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-zinc-50 transition-colors text-left min-w-0 flex-1"
+                    >
+                        <MessageSquare className="w-4 h-4 text-zinc-500 shrink-0" />
+                        <span className="text-sm font-medium text-zinc-900 truncate flex-1">
+                            {chatTitle}
+                        </span>
+                        <ChevronDown className={cn(
+                            "w-4 h-4 text-zinc-400 shrink-0 transition-transform",
+                            showChatDropdown && "rotate-180"
+                        )} />
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {showChatDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 max-h-[60vh] overflow-y-auto">
+                            <div className="p-1">
+                                <button
+                                    onClick={handleNewChat}
+                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-50 text-left transition-colors"
+                                >
+                                    <Plus className="w-4 h-4 text-zinc-500" />
+                                    <span className="text-sm font-medium text-zinc-900">New Chat</span>
+                                </button>
+                                <div className="border-t border-zinc-100 my-1" />
+                                {chats.length === 0 ? (
+                                    <div className="px-3 py-4 text-center text-sm text-zinc-400">
+                                        No chat history
+                                    </div>
+                                ) : (
+                                    chats.map((chat) => (
+                                        <button
+                                            key={chat.id}
+                                            onClick={() => handleSelectChat(chat.id)}
+                                            className={cn(
+                                                "w-full flex flex-col gap-0.5 px-3 py-2 rounded-lg hover:bg-zinc-50 text-left transition-colors",
+                                                currentChatId === chat.id && "bg-zinc-50"
+                                            )}
+                                        >
+                                            <span className="text-sm font-medium text-zinc-900 truncate">
+                                                {chat.title}
+                                            </span>
+                                            <span className="text-xs text-zinc-400">
+                                                {new Date(chat.updated_at).toLocaleDateString('en-US', {
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    hour: 'numeric',
+                                                    minute: '2-digit'
+                                                })}
+                                            </span>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
             <style>{`
                 /* Markdown styling for chat */
                 .wmde-markdown ::selection,
@@ -237,18 +374,18 @@ export default function ReflectChat() {
                                                             <span className="text-xs text-green-600">✓ Complete</span>
                                                         )}
                                                     </div>
-                                                    {toolCall.input && (
+                                                    {toolCall.input !== undefined && (
                                                         <div className="text-xs text-zinc-600 mt-1">
                                                             <pre className="whitespace-pre-wrap font-mono bg-white p-2 rounded border border-zinc-200">
-                                                                {JSON.stringify(toolCall.input, null, 2)}
+                                                                {JSON.stringify(toolCall.input as Record<string, unknown>, null, 2)}
                                                             </pre>
                                                         </div>
                                                     )}
-                                                    {toolCall.output && (
+                                                    {toolCall.output !== undefined && (
                                                         <div className="text-xs text-zinc-600 mt-2">
                                                             <div className="font-medium mb-1">Result:</div>
                                                             <pre className="whitespace-pre-wrap font-mono bg-white p-2 rounded border border-zinc-200">
-                                                                {JSON.stringify(toolCall.output, null, 2)}
+                                                                {JSON.stringify(toolCall.output as Record<string, unknown>, null, 2)}
                                                             </pre>
                                                         </div>
                                                     )}
@@ -266,8 +403,8 @@ export default function ReflectChat() {
                                     if (name === 'getEntries' && Array.isArray(output)) {
                                         return (
                                             <div key={toolIdx} className="space-y-3">
-                                                {output.map((entry: any, entryIdx: number) => (
-                                                    <EntryCard key={entry.id || entryIdx} entry={entry} />
+                                                {output.map((entry: { id?: string; [key: string]: unknown }, entryIdx: number) => (
+                                                    <EntryCard key={entry.id || `entry-${entryIdx}`} entry={entry as { id: string; text: string; created_at: number; source: string; action_type: string | null; action_context: string | null; linked_task_id: string | null; linked_commitment_id: string | null; [key: string]: unknown }} />
                                                 ))}
                                             </div>
                                         );
@@ -277,8 +414,8 @@ export default function ReflectChat() {
                                     if (name === 'getTasks' && Array.isArray(output)) {
                                         return (
                                             <div key={toolIdx} className="space-y-3">
-                                                {output.map((task: any, taskIdx: number) => (
-                                                    <TaskCard key={task.id || taskIdx} task={task} />
+                                                {output.map((task: { id?: string; [key: string]: unknown }, taskIdx: number) => (
+                                                    <TaskCard key={task.id || `task-${taskIdx}`} task={task as { id: string; content: string; status: string; planned_date: number | null; duration_minutes: number; commitment_id: string | null; task_type: string; [key: string]: unknown }} />
                                                 ))}
                                             </div>
                                         );
@@ -288,8 +425,8 @@ export default function ReflectChat() {
                                     if (name === 'getCommitments' && Array.isArray(output)) {
                                         return (
                                             <div key={toolIdx} className="space-y-3">
-                                                {output.map((commitment: any, commitmentIdx: number) => (
-                                                    <CommitmentCard key={commitment.id || commitmentIdx} commitment={commitment} />
+                                                {output.map((commitment: { id?: string; [key: string]: unknown }, commitmentIdx: number) => (
+                                                    <CommitmentCard key={commitment.id || `commitment-${commitmentIdx}`} commitment={commitment as { id: string; content: string; status: string; health_status: string | null; streak_count: number | null; longest_streak: number | null; completion_percentage: number | null; detected_blockers: string | null; next_step: string | null; user_message: string | null; expires_at: number | null; [key: string]: unknown }} />
                                                 ))}
                                             </div>
                                         );

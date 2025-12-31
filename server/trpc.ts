@@ -200,6 +200,45 @@ export const appRouter = t.router({
                 return { success: true };
             }),
     }),
+
+    chats: t.router({
+        list: t.procedure
+            .query(async ({ ctx }) => {
+                return await ctx.userDO.getChats(ctx.userId);
+            }),
+        get: t.procedure
+            .input(z.object({
+                chatId: z.string(),
+            }))
+            .query(async ({ ctx, input }) => {
+                return await ctx.userDO.getChat(ctx.userId, input.chatId);
+            }),
+        create: t.procedure
+            .input(z.object({
+                firstUserMessage: z.string().optional(),
+            }))
+            .mutation(async ({ ctx, input }) => {
+                const chatId = await ctx.userDO.createChat(ctx.userId, input.firstUserMessage);
+                return { chatId };
+            }),
+        updateTitle: t.procedure
+            .input(z.object({
+                chatId: z.string(),
+                title: z.string(),
+            }))
+            .mutation(async ({ ctx, input }) => {
+                await ctx.userDO.updateChatTitle(ctx.userId, input.chatId, input.title);
+                return { success: true };
+            }),
+        delete: t.procedure
+            .input(z.object({
+                chatId: z.string(),
+            }))
+            .mutation(async ({ ctx, input }) => {
+                await ctx.userDO.deleteChat(ctx.userId, input.chatId);
+                return { success: true };
+            }),
+    }),
 });
 
 export type AppRouter = typeof appRouter;

@@ -28,6 +28,28 @@ export interface FeedItemRendered {
     phrasing: string;
     supporting_note?: string;
     suggested_actions: Array<{ action: string; label: string }>;
+    // Rich metadata fields
+    generation_reason?: string;
+    related_task_id?: string | null;
+    related_commitment_id?: string | null;
+    related_signal_ids?: string[];
+    source_entry_ids?: string[];
+    priority_score?: number;
+    expires_at?: number | null;
+    metadata?: {
+        context?: {
+            time_of_day?: string;
+            energy_level?: number;
+            location?: string;
+        };
+        timing?: string;
+        urgency?: number;
+        importance?: number;
+        deadline?: number;
+        duration_estimate?: number;
+    };
+    created_at?: number;
+    type?: string;
 }
 
 export interface Env {
@@ -63,6 +85,7 @@ export class UserDO extends DurableObject<Env> {
     private commitmentService: CommitmentService;
     private taskService: TaskService;
     private feedService: FeedService;
+    private aiServicePromise: Promise<import('./ai-service').AIService> | null = null;
 
     constructor(state: DurableObjectState, env: Env) {
         super(state, env);
@@ -79,7 +102,12 @@ export class UserDO extends DurableObject<Env> {
         // Initialize Services
         this.entryService = new EntryService(this.entryDAO);
         this.signalService = new SignalService(this.signalDAO);
-        this.commitmentService = new CommitmentService(this.commitmentDAO);
+        // Initialize AIService lazily (will be created when needed)
+        this.aiServicePromise = import('./ai-service').then(({ AIService }) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return new AIService(this.env as any);
+        });
+        this.commitmentService = new CommitmentService(this.commitmentDAO, undefined);
         this.taskService = new TaskService(this.taskDAO);
         this.feedService = new FeedService(this.feedDAO);
 
@@ -106,21 +134,43 @@ export class UserDO extends DurableObject<Env> {
             { table: 'entries', column: 'location', type: 'TEXT' },
             { table: 'entries', column: 'mood', type: 'TEXT' },
             { table: 'entries', column: 'energy_level', type: 'INTEGER' },
+            { table: 'entries', column: 'feed_item_id', type: 'TEXT' },
+            { table: 'entries', column: 'action_type', type: 'TEXT' },
+            { table: 'entries', column: 'action_context', type: 'TEXT' },
             { table: 'feed_snapshots', column: 'last_processed_entry_id', type: 'TEXT' },
             { table: 'feed_snapshots', column: 'cache_metrics_json', type: 'TEXT' },
+            // Commitment schema migrations
+            { table: 'commitments', column: 'confirmed_at', type: 'INTEGER' },
+            { table: 'commitments', column: 'time_horizon_type', type: 'TEXT' },
+            { table: 'commitments', column: 'time_horizon_value', type: 'INTEGER' },
+            { table: 'commitments', column: 'cadence_days', type: 'INTEGER' },
+            { table: 'commitments', column: 'check_in_method', type: 'TEXT' },
         ];
 
         for (const migration of migrations) {
             try {
                 this.sql.exec(`ALTER TABLE ${migration.table} ADD COLUMN ${migration.column} ${migration.type}`);
-            } catch (e: any) {
+            } catch (e: unknown) {
                 // Column already exists or table doesn't exist yet - both are fine
                 // SQLite error code 1 means the column already exists
-                if (e?.message && !e.message.includes('duplicate column name') && !e.message.includes('no such column')) {
-                    console.warn(`[Migration] Failed to add ${migration.column} to ${migration.table}:`, e.message);
+                const errorMessage = e instanceof Error ? e.message : String(e);
+                if (errorMessage && !errorMessage.includes('duplicate column name') && !errorMessage.includes('no such column')) {
+                    console.warn(`[Migration] Failed to add ${migration.column} to ${migration.table}:`, errorMessage);
                 }
                 // Silently ignore "duplicate column" errors
             }
+        }
+        
+        // Migrate existing commitment statuses
+        try {
+            this.sql.exec(`UPDATE commitments SET status = 'active' WHERE status = 'acknowledged'`);
+            this.sql.exec(`UPDATE commitments SET status = 'retired' WHERE status = 'cancelled'`);
+            
+            // Set confirmed_at to created_at for existing commitments (treat as already confirmed)
+            this.sql.exec(`UPDATE commitments SET confirmed_at = created_at WHERE confirmed_at IS NULL`);
+        } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            console.warn(`[Migration] Failed to migrate commitment statuses:`, errorMessage);
         }
     }
 
@@ -143,6 +193,10 @@ export class UserDO extends DurableObject<Env> {
             eventType?: string;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             payload?: any;
+            feedItemId?: string | null;
+            actionType?: string | null;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            actionContext?: any;
         }
     ): Promise<string> {
         const entryId = this.entryService.addEntry(userId, text, source, opts);
@@ -172,15 +226,118 @@ export class UserDO extends DurableObject<Env> {
             const commitmentId = opts.linkedCommitmentId;
             switch (opts.eventType) {
                 case 'commitment_acknowledge':
-                    this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'acknowledged', entryId, true);
+                    this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'active', entryId, true);
                     break;
                 case 'commitment_complete':
                     this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'completed', entryId, true);
                     break;
                 case 'commitment_cancel':
-                    this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'cancelled', entryId);
+                    this.commitmentService.updateCommitmentStatus(userId, commitmentId, 'retired', entryId);
                     break;
             }
+        }
+
+        // Handle renegotiation (when user describes changes to a commitment without explicit event type)
+        if (opts?.linkedCommitmentId && !opts?.eventType && text && text.toLowerCase().includes('renegotiat')) {
+            // Parse renegotiation text to extract changes
+            const linkedCommitmentId = opts.linkedCommitmentId;
+            this.state.waitUntil(
+                (async () => {
+                    try {
+                        // Get AIService if not already set
+                        if (this.aiServicePromise) {
+                            const aiService = await this.aiServicePromise;
+                            const { CommitmentService } = await import('./services');
+                            this.commitmentService = new CommitmentService(this.commitmentDAO, aiService);
+                        }
+                        
+                        const currentCommitment = this.commitmentService.getCommitmentById(userId, linkedCommitmentId);
+                        if (!currentCommitment) {
+                            console.error(`[UserDO] Commitment ${opts.linkedCommitmentId} not found for renegotiation`);
+                            return;
+                        }
+
+                        // Parse changes from text using LLM
+                        if (this.aiServicePromise && text) {
+                            const aiService = await this.aiServicePromise;
+                            const parsed = await aiService.parseCommitmentDetails(text);
+                            
+                            // Create new version with updated fields
+                            const maxVersion = this.commitmentDAO.getMaxVersion(userId, currentCommitment.origin_entry_id);
+                            const newVersion = maxVersion + 1;
+                            const now = Date.now();
+                            
+                            // Update content if changed, otherwise keep original
+                            const updatedContent = parsed.content !== text ? parsed.content : currentCommitment.content;
+                            
+                            // Update expires_at if time_horizon_value changed
+                            const updatedExpiresAt = parsed.time_horizon_type === "date" && parsed.time_horizon_value
+                                ? parsed.time_horizon_value
+                                : currentCommitment.expires_at;
+
+                            const params: import('./db/daos/CommitmentDAO').CreateCommitmentParams = {
+                                id: crypto.randomUUID(),
+                                userId,
+                                originEntryId: currentCommitment.origin_entry_id,
+                                content: updatedContent,
+                                strength: parsed.strength || currentCommitment.strength,
+                                horizon: parsed.horizon || currentCommitment.horizon,
+                                status: 'renegotiated', // Mark as renegotiated
+                                createdAt: now,
+                                expiresAt: updatedExpiresAt,
+                                lastAcknowledgedAt: currentCommitment.last_acknowledged_at,
+                                progressScore: currentCommitment.progress_score,
+                                sourceType: currentCommitment.source_type,
+                                version: newVersion,
+                                triggerCaptureId: currentCommitment.trigger_capture_id,
+                                sourceWindowDays: currentCommitment.source_window_days,
+                                llmRunId: currentCommitment.llm_run_id,
+                                confirmedAt: currentCommitment.confirmed_at,
+                                timeHorizonType: parsed.time_horizon_type || currentCommitment.time_horizon_type,
+                                timeHorizonValue: parsed.time_horizon_value || currentCommitment.time_horizon_value,
+                                cadenceDays: parsed.cadence_days || currentCommitment.cadence_days,
+                                checkInMethod: parsed.check_in_method || currentCommitment.check_in_method,
+                            };
+
+                            this.commitmentDAO.create(params);
+                            console.log(`[UserDO] Renegotiated commitment ${opts.linkedCommitmentId} for user ${userId}`);
+                        }
+                    } catch (err: unknown) {
+                        console.error(`[UserDO] Failed to renegotiate commitment:`, err);
+                    }
+                })()
+            );
+        }
+
+        // Handle commitment_confirm event (creates new commitment from potential)
+        if (opts?.eventType === 'commitment_confirm') {
+            // Extract feed item metadata from action_context if available
+            const feedItemMetadata = opts.actionContext as Record<string, unknown> | undefined;
+            const originEntryId = opts.feedItemId || entryId; // Use feed_item_id as origin if available
+            
+            // Confirm commitment asynchronously
+            this.state.waitUntil(
+                (async () => {
+                    try {
+                        // Get AIService if not already set
+                        if (this.aiServicePromise) {
+                            const aiService = await this.aiServicePromise;
+                            // Create new CommitmentService with AIService
+                            const { CommitmentService } = await import('./services');
+                            this.commitmentService = new CommitmentService(this.commitmentDAO, aiService);
+                        }
+                        await this.commitmentService.confirmCommitment(
+                            userId,
+                            originEntryId,
+                            text,
+                            feedItemMetadata
+                        );
+                        console.log(`[UserDO] Confirmed commitment for user ${userId} from entry ${entryId}`);
+                    } catch (err: unknown) {
+                        console.error(`[UserDO] Failed to confirm commitment:`, err);
+                    }
+                })()
+            );
         }
 
         // Trigger workflow for background processing (non-blocking)
@@ -363,7 +520,7 @@ export class UserDO extends DurableObject<Env> {
         items: FeedItemRendered[],
         metadata?: {
             lastProcessedEntryId?: string | null;
-            cacheMetrics?: any;
+            cacheMetrics?: Record<string, unknown>;
         }
     ): Promise<string> {
         return this.feedService.saveFeedSnapshot(userId, version, items, metadata);

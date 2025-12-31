@@ -86,6 +86,11 @@ export function CaptureBox() {
                 parentId: undefined,
             });
 
+            // Haptic feedback on successful capture
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(50); // 50ms subtle pulse
+            }
+
             // Create capture with metadata if available
             await createCapture.mutateAsync({
                 entryId,
@@ -95,6 +100,9 @@ export function CaptureBox() {
                 linked_task_id: metadata?.linked_task_id,
                 linked_commitment_id: metadata?.linked_commitment_id,
                 event_payload: metadata?.event_payload,
+                feed_item_id: metadata?.feed_item_id,
+                action_type: metadata?.action_type,
+                action_context: metadata?.action_context,
             });
 
             // Show undo toast if this was an event-driven action

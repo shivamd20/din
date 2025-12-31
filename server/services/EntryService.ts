@@ -15,6 +15,10 @@ export interface AddEntryOptions {
     location?: string;
     mood?: string;
     energyLevel?: number;
+    feedItemId?: string | null;
+    actionType?: string | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    actionContext?: any;
 }
 
 /**
@@ -44,6 +48,9 @@ export class EntryService {
         const location = opts?.location || null;
         const mood = opts?.mood || null;
         const energyLevel = opts?.energyLevel || null;
+        const feedItemId = opts?.feedItemId || null;
+        const actionType = opts?.actionType || null;
+        const actionContext = opts?.actionContext ? JSON.stringify(opts.actionContext) : null;
 
         // Check if entry exists (idempotency)
         if (!this.entryDAO.exists(entryId)) {
@@ -63,6 +70,9 @@ export class EntryService {
                 location,
                 mood,
                 energyLevel,
+                feedItemId,
+                actionType,
+                actionContext,
             };
             this.entryDAO.create(params);
         }

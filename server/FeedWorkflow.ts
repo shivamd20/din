@@ -46,15 +46,50 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
                 }
             );
 
-            // Step 3: Build prompt structure (70-90% prefix, 10-30% suffix)
-            const promptStructure = await step.do(
-                "build-prompt",
+            // Step 3: Fetch tasks, commitments, and signals for LLM linking
+            const entityContext = await step.do(
+                "fetch-entities",
                 async () => {
-                    return buildPrompt(allEntries, lastProcessedEntryId, currentTime);
+                    const userDO = this.env.USER_DO.get(
+                        this.env.USER_DO.idFromName(userId)
+                    );
+                    const [tasks, commitments, signals] = await Promise.all([
+                        userDO.getTasks(userId, { include_history: false }),
+                        userDO.getCommitments(userId, { include_history: false }),
+                        userDO.getSignals(userId, { include_history: false })
+                    ]);
+                    
+                    // Determine time of day context
+                    const hour = new Date(currentTime).getHours();
+                    let timeOfDay: string;
+                    if (hour >= 5 && hour < 12) {
+                        timeOfDay = 'morning';
+                    } else if (hour >= 12 && hour < 17) {
+                        timeOfDay = 'afternoon';
+                    } else if (hour >= 17 && hour < 21) {
+                        timeOfDay = 'evening';
+                    } else {
+                        timeOfDay = 'night';
+                    }
+                    
+                    return {
+                        tasks,
+                        commitments,
+                        signals,
+                        timeOfDay
+                    };
                 }
             );
 
-            // Step 4: Generate feed with LLM (Anthropic with prompt caching)
+            // Step 4: Build prompt structure (70-90% prefix, 10-30% suffix)
+            const promptStructure = await step.do(
+                "build-prompt",
+                async () => {
+                    return buildPrompt(allEntries, lastProcessedEntryId, currentTime, entityContext);
+                }
+            );
+
+            // Step 5: Generate feed with LLM (Anthropic with prompt caching)
             const { items, metrics } = await step.do(
                 "generate-feed",
                 async () => {
@@ -63,7 +98,7 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
                 }
             );
 
-            // Step 5: Persist feed and update last_processed_entry_id
+            // Step 6: Persist feed and update last_processed_entry_id
             await step.do(
                 "persist-feed",
                 async () => {
@@ -79,7 +114,7 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
                     
                     await userDO.saveFeedSnapshot(userId, version, items, {
                         lastProcessedEntryId: newLastProcessedEntryId,
-                        cacheMetrics: metrics
+                        cacheMetrics: metrics as unknown as Record<string, unknown>
                     });
                 }
             );

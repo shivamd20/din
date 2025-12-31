@@ -1,50 +1,112 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Clock, X, MessageSquareQuote, CheckSquare, Zap, Target, ArrowRight, HelpCircle } from 'lucide-react';
+import { CheckCircle2, Clock, MessageSquareQuote, CheckSquare, Target, ArrowRight, HelpCircle, AlertCircle, ExternalLink, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { DynamicCardData, CardAction } from '../../hooks/use-home-data';
 import { cn } from '@/lib/utils';
 
 interface CardProps {
-    data: DynamicCardData;
+    data: DynamicCardData & {
+        feed_item_id?: string;
+        related_task_id?: string | null;
+        related_commitment_id?: string | null;
+        generation_reason?: string;
+        priority_score?: number;
+        expires_at?: number | null;
+        metadata?: any;
+    };
     onAction: (action: CardAction['action']) => void;
-    onDismiss: (cardId: string) => void;
 }
 
-function BaseCard({ children, className = '', onDismiss, cardId, explanation }: { children: React.ReactNode, className?: string, onDismiss: (id: string) => void, cardId: string, explanation?: string }) {
-    const [showExplanation, setShowExplanation] = useState(false);
+function BaseCard({ 
+    children, 
+    className = '', 
+    generationReason,
+    priorityScore,
+    expiresAt,
+    relatedTaskId,
+    relatedCommitmentId
+}: { 
+    children: React.ReactNode, 
+    className?: string, 
+    generationReason?: string,
+    priorityScore?: number,
+    expiresAt?: number | null,
+    relatedTaskId?: string | null,
+    relatedCommitmentId?: string | null
+}) {
+    const navigate = useNavigate();
+    const [showWhy, setShowWhy] = useState(false);
+
+    // Calculate priority border styling (visual only, not displayed)
+    const hasExpired = expiresAt && expiresAt < Date.now();
+    const isExpiringSoon = expiresAt && expiresAt > Date.now() && expiresAt < Date.now() + 24 * 60 * 60 * 1000;
+    
+    // Priority-based border color and shadow (subtle visual indicator)
+    const priorityBorderClass = priorityScore && priorityScore > 0.7 
+        ? "border-amber-200" 
+        : priorityScore && priorityScore > 0.4 
+        ? "border-zinc-200"
+        : "border-zinc-200/80";
+    
+    const priorityShadow = priorityScore && priorityScore > 0.7 
+        ? "shadow-[0_2px_12px_-4px_rgba(251,191,36,0.2)]" 
+        : priorityScore && priorityScore > 0.4 
+        ? "shadow-sm"
+        : "";
 
     return (
         <div className={cn(
-            "relative p-5 rounded-2xl bg-white border border-zinc-200/80 shadow-sm transition-all hover:shadow-md",
+            "relative p-5 rounded-2xl bg-white border transition-all hover:shadow-md",
             className,
-            "group"
+            "group",
+            priorityBorderClass,
+            priorityShadow
         )}>
-            {/* Dismiss button */}
-            <button
-                onClick={() => onDismiss(cardId)}
-                className="absolute top-3 right-3 p-1.5 text-zinc-300 hover:text-zinc-600 hover:bg-zinc-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                aria-label="Dismiss"
-            >
-                <X className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Why am I seeing this? button */}
-            {explanation && (
+            {/* Why this? button - only show if there's a generation reason */}
+            {generationReason && (
                 <button
-                    onClick={() => setShowExplanation(!showExplanation)}
-                    className="absolute top-3 right-12 p-1.5 text-zinc-300 hover:text-zinc-600 hover:bg-zinc-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                    onClick={() => setShowWhy(!showWhy)}
+                    className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 rounded-lg transition-all"
                     aria-label="Why am I seeing this?"
                 >
-                    <HelpCircle className="w-3.5 h-3.5" />
+                    <HelpCircle className="w-4 h-4" />
                 </button>
             )}
 
-            {/* Explanation tooltip */}
-            {showExplanation && explanation && (
-                <div className="absolute top-12 right-3 z-10 p-3 bg-zinc-900 text-white text-xs rounded-xl shadow-lg max-w-[200px] animate-in fade-in slide-in-from-top-2">
-                    <p className="leading-relaxed">{explanation}</p>
+            {/* Why this? tooltip */}
+            {showWhy && generationReason && (
+                <div className="absolute top-12 right-3 z-10 p-3 bg-zinc-900 text-white text-sm rounded-xl shadow-lg max-w-[240px] animate-in fade-in slide-in-from-top-2">
+                    <p className="leading-relaxed font-medium mb-1">Why this?</p>
+                    <p className="leading-relaxed text-zinc-300">{generationReason}</p>
                     <div className="absolute -top-1 right-4 w-2 h-2 bg-zinc-900 rotate-45" />
                 </div>
             )}
+
+            {/* User-friendly links and indicators */}
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+                {isExpiringSoon && !hasExpired && (
+                    <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 flex items-center gap-1.5 border border-amber-200/50">
+                        <Clock className="w-3 h-3" />
+                        <span>Due soon</span>
+                    </span>
+                )}
+                {hasExpired && (
+                    <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-red-50 text-red-700 flex items-center gap-1.5 border border-red-200/50">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Expired</span>
+                    </span>
+                )}
+                {relatedCommitmentId && (
+                    <button
+                        onClick={() => navigate('/commitments')}
+                        className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center gap-1.5 border border-purple-200/50 transition-colors"
+                    >
+                        <Target className="w-3 h-3" />
+                        <span>View Commitment</span>
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                    </button>
+                )}
+            </div>
 
             {children}
         </div>
@@ -73,11 +135,15 @@ function ActionButton({ action, onClick, variant }: { action: string, onClick: (
     );
 }
 
-export function FocusCard({ data, onAction, onDismiss }: CardProps) {
-    const explanation = "This task matters most today based on your recent captures and priorities.";
-    
+export function FocusCard({ data, onAction }: CardProps) {
     return (
-        <BaseCard onDismiss={onDismiss} cardId={data.id} explanation={explanation}>
+        <BaseCard 
+            generationReason={data.generation_reason}
+            priorityScore={data.priority_score}
+            expiresAt={data.expires_at}
+            relatedTaskId={data.related_task_id}
+            relatedCommitmentId={data.related_commitment_id}
+        >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-sm ring-1 ring-amber-100/50">
@@ -98,12 +164,17 @@ export function FocusCard({ data, onAction, onDismiss }: CardProps) {
     );
 }
 
-export function TodoLiteCard({ data, onAction, onDismiss }: CardProps) {
+export function TodoLiteCard({ data, onAction }: CardProps) {
     const items = Array.isArray(data.content) ? data.content : [data.content];
-    const explanation = "These tasks were extracted from your recent captures and organized for you.";
 
     return (
-        <BaseCard onDismiss={onDismiss} cardId={data.id} explanation={explanation}>
+        <BaseCard 
+            generationReason={data.generation_reason}
+            priorityScore={data.priority_score}
+            expiresAt={data.expires_at}
+            relatedTaskId={data.related_task_id}
+            relatedCommitmentId={data.related_commitment_id}
+        >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm ring-1 ring-blue-100/50">
@@ -134,11 +205,15 @@ export function TodoLiteCard({ data, onAction, onDismiss }: CardProps) {
     );
 }
 
-export function ReflectionCard({ data, onAction, onDismiss }: CardProps) {
-    const explanation = "This reflection is based on patterns in your recent entries.";
-
+export function ReflectionCard({ data, onAction }: CardProps) {
     return (
-        <BaseCard onDismiss={onDismiss} cardId={data.id} explanation={explanation}>
+        <BaseCard 
+            generationReason={data.generation_reason}
+            priorityScore={data.priority_score}
+            expiresAt={data.expires_at}
+            relatedTaskId={data.related_task_id}
+            relatedCommitmentId={data.related_commitment_id}
+        >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shadow-sm ring-1 ring-indigo-100/50">
@@ -161,11 +236,15 @@ export function ReflectionCard({ data, onAction, onDismiss }: CardProps) {
     );
 }
 
-export function HabitCard({ data, onAction, onDismiss }: CardProps) {
-    const explanation = "This habit suggestion comes from recurring patterns in your entries.";
-
+export function HabitCard({ data, onAction }: CardProps) {
     return (
-        <BaseCard onDismiss={onDismiss} cardId={data.id} explanation={explanation}>
+        <BaseCard 
+            generationReason={data.generation_reason}
+            priorityScore={data.priority_score}
+            expiresAt={data.expires_at}
+            relatedTaskId={data.related_task_id}
+            relatedCommitmentId={data.related_commitment_id}
+        >
             <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 mt-0.5 shadow-sm ring-1 ring-emerald-100/50">
                     <Clock className="w-4.5 h-4.5" />
@@ -196,17 +275,33 @@ export function HabitCard({ data, onAction, onDismiss }: CardProps) {
     );
 }
 
-export function GoalCard({ data, onAction, onDismiss }: CardProps) {
-    const explanation = "This goal emerged from themes in your recent captures and commitments.";
-
+export function GoalCard({ data, onAction }: CardProps) {
+    // Check if this is a potential commitment
+    const isPotentialCommitment = data.metadata?.is_potential_commitment === true;
+    
     return (
-        <BaseCard onDismiss={onDismiss} cardId={data.id} explanation={explanation}>
+        <BaseCard 
+            generationReason={data.generation_reason}
+            priorityScore={data.priority_score}
+            expiresAt={data.expires_at}
+            relatedTaskId={data.related_task_id}
+            relatedCommitmentId={data.related_commitment_id}
+        >
             <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 shadow-sm ring-1 ring-purple-100/50">
                         <Target className="w-4 h-4" />
                     </div>
-                    <h3 className="text-[15px] font-semibold text-zinc-900 tracking-tight">{data.title}</h3>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-[15px] font-semibold text-zinc-900 tracking-tight">{data.title}</h3>
+                            {isPotentialCommitment && (
+                                <span className="text-[10px] font-medium px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full border border-purple-200/50">
+                                    Potential
+                                </span>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
                 <p className="text-[15px] text-zinc-600 leading-relaxed font-normal">{data.content}</p>

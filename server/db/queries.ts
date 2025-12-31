@@ -70,7 +70,12 @@ export const SCHEMA_QUERIES = {
             version INTEGER NOT NULL DEFAULT 1,
             trigger_capture_id TEXT,
             source_window_days INTEGER,
-            llm_run_id TEXT
+            llm_run_id TEXT,
+            confirmed_at INTEGER,
+            time_horizon_type TEXT,
+            time_horizon_value INTEGER,
+            cadence_days INTEGER,
+            check_in_method TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_commitments_user ON commitments(user_id);
         CREATE INDEX IF NOT EXISTS idx_commitments_trigger ON commitments(trigger_capture_id);
@@ -179,8 +184,9 @@ export const ENTRY_QUERIES = {
         INSERT INTO entries (
             id, user_id, text, created_at, source, attachments_json,
             root_id, parent_id, linked_task_id, linked_commitment_id,
-            event_type, payload_json, location, mood, energy_level
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            event_type, payload_json, location, mood, energy_level,
+            feed_item_id, action_type, action_context
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
 
     GET_BY_USER_TIME_WINDOW: `
@@ -254,8 +260,9 @@ export const COMMITMENT_QUERIES = {
         INSERT INTO commitments (
             id, user_id, origin_entry_id, content, strength, horizon,
             created_at, expires_at, last_acknowledged_at,
-            version, trigger_capture_id, source_window_days, status, llm_run_id, source_type, progress_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            version, trigger_capture_id, source_window_days, status, llm_run_id, source_type, progress_score,
+            confirmed_at, time_horizon_type, time_horizon_value, cadence_days, check_in_method
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
 
     GET_BASE: `SELECT * FROM commitments WHERE user_id = ?`,

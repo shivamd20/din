@@ -6,8 +6,8 @@ export interface Commitment {
     origin_entry_id: string;
     content: string;
     strength: string; // weak | medium | strong
-    horizon: string; // short | medium | long
-    status: string; // active | completed | cancelled
+    horizon: string; // short | medium | long (legacy field, kept for compatibility)
+    status: string; // confirmed | active | completed | retired | renegotiated
     created_at: number;
     expires_at: number | null;
     last_acknowledged_at: number | null;
@@ -17,6 +17,11 @@ export interface Commitment {
     trigger_capture_id: string | null;
     source_window_days: number | null;
     llm_run_id: string | null;
+    confirmed_at: number | null;
+    time_horizon_type: string | null; // date | daily | weekly | monthly | continuous | maintain
+    time_horizon_value: number | null; // timestamp if type="date"
+    cadence_days: number | null; // recurring interval in days (e.g., 7 for weekly)
+    check_in_method: string | null; // review | metric | reminder | task_completion
 }
 
 export interface CreateCommitmentParams {
@@ -36,6 +41,11 @@ export interface CreateCommitmentParams {
     triggerCaptureId: string | null;
     sourceWindowDays: number | null;
     llmRunId: string | null;
+    confirmedAt: number | null;
+    timeHorizonType: string | null;
+    timeHorizonValue: number | null;
+    cadenceDays: number | null;
+    checkInMethod: string | null;
 }
 
 export interface GetCommitmentsOptions {
@@ -83,7 +93,12 @@ export class CommitmentDAO {
             params.status,
             params.llmRunId,
             params.sourceType,
-            params.progressScore
+            params.progressScore,
+            params.confirmedAt,
+            params.timeHorizonType,
+            params.timeHorizonValue,
+            params.cadenceDays,
+            params.checkInMethod
         );
     }
 

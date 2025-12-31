@@ -1,6 +1,6 @@
 import { trpc } from '../lib/trpc';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Target, Loader2, HelpCircle } from 'lucide-react';
+import { Target, Loader2, HelpCircle, ChevronDown, ChevronUp, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useCapture } from '@/contexts/CaptureContext';
@@ -11,22 +11,23 @@ export default function CommitmentsPage() {
         include_history: false,
     });
     const [explainedId, setExplainedId] = useState<string | null>(null);
+    const [showCompleted, setShowCompleted] = useState(false);
     const { openCapture } = useCapture();
 
-    // Filter for only active/acknowledged commitments
+    // Filter commitments by status
     const activeCommitments = commitments?.filter(
-        c => c.status === 'active' || c.status === 'acknowledged'
+        c => c.status === 'active' || c.status === 'confirmed'
+    ) || [];
+    
+    const completedCommitments = commitments?.filter(
+        c => c.status === 'completed' || c.status === 'retired'
     ) || [];
 
-    const handleAction = (action: string, commitment: typeof activeCommitments[0]) => {
+    const handleAction = (action: string, commitment: typeof activeCommitments[0] | typeof completedCommitments[0]) => {
         let prefillText = '';
         let eventType: 'commitment_acknowledge' | 'commitment_complete' | 'commitment_cancel' | undefined;
         
         switch (action) {
-            case 'acknowledge':
-                prefillText = ''; // User must provide text
-                eventType = 'commitment_acknowledge';
-                break;
             case 'complete':
                 prefillText = `Completed ${commitment.content}`;
                 eventType = 'commitment_complete';
@@ -35,12 +36,21 @@ export default function CommitmentsPage() {
                 prefillText = `Cancelling ${commitment.content}. Why?`;
                 eventType = 'commitment_cancel';
                 break;
+            case 'renegotiate':
+                prefillText = `Renegotiating ${commitment.content}. What's changing?`;
+                // Renegotiation will be handled via capture text parsing
+                openCapture(prefillText, {
+                    linked_commitment_id: commitment.id,
+                });
+                return;
         }
 
-        openCapture(prefillText, eventType ? {
-            event_type: eventType,
-            linked_commitment_id: commitment.id,
-        } : undefined);
+        if (eventType) {
+            openCapture(prefillText, {
+                event_type: eventType,
+                linked_commitment_id: commitment.id,
+            });
+        }
     };
 
     if (isLoading) {
@@ -68,6 +78,7 @@ export default function CommitmentsPage() {
     return (
         <div className="h-full w-full bg-white overflow-y-auto overscroll-y-contain pb-32">
             <div className="max-w-xl mx-auto px-6 py-6 space-y-4">
+                {/* Active Commitments */}
                 {activeCommitments.map((commitment) => {
                     const strength = commitment.strength || 'medium';
                     const progressScore = commitment.progress_score || 0;
@@ -132,22 +143,25 @@ export default function CommitmentsPage() {
                             {/* Action Buttons */}
                             <div className="flex items-center gap-2 pt-2 border-t border-zinc-100">
                                 <button
-                                    onClick={() => handleAction('acknowledge', commitment)}
-                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors"
-                                >
-                                    <span>Acknowledge</span>
-                                </button>
-                                <button
                                     onClick={() => handleAction('complete', commitment)}
                                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors"
                                 >
+                                    <CheckCircle2 className="w-4 h-4" />
                                     <span>Complete</span>
                                 </button>
                                 <button
                                     onClick={() => handleAction('cancel', commitment)}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors"
+                                >
+                                    <XCircle className="w-4 h-4" />
+                                    <span>Retire</span>
+                                </button>
+                                <button
+                                    onClick={() => handleAction('renegotiate', commitment)}
                                     className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 rounded-lg transition-colors ml-auto"
                                 >
-                                    <span>Cancel</span>
+                                    <RotateCcw className="w-4 h-4" />
+                                    <span>Renegotiate</span>
                                 </button>
                             </div>
 
@@ -158,6 +172,57 @@ export default function CommitmentsPage() {
                         </div>
                     );
                 })}
+                
+                {/* Completed Commitments - Collapsed Section */}
+                {completedCommitments.length > 0 && (
+                    <div className="mt-8 pt-8 border-t border-zinc-200">
+                        <button
+                            onClick={() => setShowCompleted(!showCompleted)}
+                            className="flex items-center gap-2 w-full text-left text-sm font-medium text-zinc-500 hover:text-zinc-700 transition-colors mb-4"
+                        >
+                            {showCompleted ? (
+                                <ChevronUp className="w-4 h-4" />
+                            ) : (
+                                <ChevronDown className="w-4 h-4" />
+                            )}
+                            <span>Completed ({completedCommitments.length})</span>
+                        </button>
+                        
+                        {showCompleted && (
+                            <div className="space-y-4">
+                                {completedCommitments.map((commitment) => {
+                                    const strength = commitment.strength || 'medium';
+                                    
+                                    return (
+                                        <div
+                                            key={commitment.id}
+                                            className="p-5 rounded-2xl bg-zinc-50 border border-zinc-200/50 opacity-75"
+                                        >
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <h3 className="text-[15px] font-medium text-zinc-600 line-through">
+                                                        {commitment.content}
+                                                    </h3>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <span className="px-2 py-0.5 bg-zinc-100 text-zinc-500 rounded-full text-xs font-medium capitalize">
+                                                            {strength}
+                                                        </span>
+                                                        <span className="px-2 py-0.5 bg-zinc-100 text-zinc-500 rounded-full text-xs font-medium capitalize">
+                                                            {commitment.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 pt-3 border-t border-zinc-100 flex items-center gap-3 text-xs text-zinc-400">
+                                                <span>{format(new Date(commitment.created_at), 'MMM d, yyyy')}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

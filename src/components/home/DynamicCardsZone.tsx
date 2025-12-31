@@ -18,49 +18,104 @@ export function DynamicCardsZone() {
         setDismissedIds(prev => new Set([...prev, id]));
     };
 
-    const handleAction = (action: string, card: DynamicCardData) => {
-        // Generate prefill text based on action and card content
+    const handleAction = (action: string, card: DynamicCardData & {
+        feed_item_id?: string;
+        related_task_id?: string | null;
+        related_commitment_id?: string | null;
+        generation_reason?: string;
+        metadata?: Record<string, unknown>;
+    }) => {
+        // Extract metadata from card
+        const feedItemId = card.feed_item_id || card.id;
+        const relatedTaskId = card.related_task_id;
+        const relatedCommitmentId = card.related_commitment_id;
+        const generationReason = card.generation_reason;
+        const metadata = card.metadata || {};
+        const isPotentialCommitment = metadata.is_potential_commitment === true;
+
+        // Generate smart prefill text based on action and card context
         let prefillText = '';
-        let eventType: 'task_start' | 'task_snooze' | 'task_skip' | 'task_finish' | undefined;
-        let linkedTaskId: string | undefined;
-        let linkedCommitmentId: string | undefined;
+        let eventType: 'task_start' | 'task_snooze' | 'task_skip' | 'task_finish' | 'commitment_acknowledge' | 'commitment_complete' | 'commitment_cancel' | 'commitment_confirm' | 'clarification_response' | undefined;
+        let guidedPrompt = '';
 
         const content = Array.isArray(card.content) ? card.content[0] : card.content;
 
-        switch (action) {
-            case 'start':
-                prefillText = `Started working on ${content}`;
-                eventType = 'task_start';
-                // Extract task/commitment ID from card if available (would need to be passed in card data)
-                break;
-            case 'snooze':
-                prefillText = `Snoozing ${content}. Snooze until?`;
-                eventType = 'task_snooze';
-                break;
-            case 'skip':
-                prefillText = `Skipping ${content}`;
-                eventType = 'task_skip';
-                break;
-            case 'done':
-                prefillText = `Finished ${content}`;
-                eventType = 'task_finish';
-                break;
-            case 'open_capture':
-                prefillText = '';
-                break;
-            default:
-                prefillText = content;
+        // Handle potential commitment actions
+        if (isPotentialCommitment) {
+            if (action === 'open_capture') {
+                // This is the "Confirm Commitment" action
+                prefillText = `Confirming commitment: ${content}`;
+                eventType = 'commitment_confirm';
+                guidedPrompt = 'Add any details about this commitment (time horizon, check-in method, etc.)';
+            } else if (action === 'dismiss' || action === 'skip') {
+                // This is the "Not a Commitment" action - soft dismiss
+                handleDismiss(card.id);
+                return; // Don't open capture box for dismissal
+            }
         }
 
-        // Open capture box with prefill
-        openCapture(prefillText, eventType ? {
-            event_type: eventType,
-            linked_task_id: linkedTaskId,
-            linked_commitment_id: linkedCommitmentId,
-        } : undefined);
+        // Handle regular actions if not a potential commitment action
+        if (!eventType && !isPotentialCommitment) {
+            switch (action) {
+                case 'start':
+                    prefillText = `Started working on ${content}`;
+                    eventType = 'task_start';
+                    guidedPrompt = 'What are you focusing on for this task?';
+                    break;
+                case 'snooze':
+                    prefillText = `Snoozing ${content}. Snooze until?`;
+                    eventType = 'task_snooze';
+                    guidedPrompt = 'When should this be rescheduled?';
+                    break;
+                case 'skip':
+                    prefillText = `Skipping ${content}`;
+                    eventType = 'task_skip';
+                    guidedPrompt = 'Why are you skipping this?';
+                    break;
+                case 'done':
+                    prefillText = `Finished ${content}`;
+                    eventType = 'task_finish';
+                    guidedPrompt = 'What did you accomplish?';
+                    break;
+                case 'open_capture':
+                    prefillText = '';
+                    guidedPrompt = generationReason ? `About: ${generationReason}` : 'What\'s on your mind?';
+                    break;
+                default:
+                    prefillText = content;
+                    guidedPrompt = generationReason ? `Context: ${generationReason}` : '';
+            }
+        }
 
-        // Dismiss card for certain actions
-        if (action === 'done' || action === 'snooze' || action === 'skip') {
+        // Build action context with guided prompt and potential commitment metadata
+        const actionContext: Record<string, unknown> = {
+            guided_prompt: guidedPrompt,
+            card_content: content,
+            ...(generationReason && { generation_reason: generationReason }),
+            // Include potential commitment metadata for LLM parsing
+            ...(isPotentialCommitment && {
+                detected_strength: metadata.detected_strength,
+                detected_horizon: metadata.detected_horizon,
+                time_horizon_type: metadata.time_horizon_type,
+                time_horizon_value: metadata.time_horizon_value,
+                cadence_days: metadata.cadence_days,
+                check_in_method: metadata.check_in_method,
+                consequence_level: metadata.consequence_level
+            })
+        };
+
+        // Open capture box with prefill and metadata
+        openCapture(prefillText, {
+            event_type: eventType,
+            linked_task_id: relatedTaskId || undefined,
+            linked_commitment_id: relatedCommitmentId || undefined,
+            feed_item_id: feedItemId,
+            action_type: action,
+            action_context: actionContext
+        });
+
+        // Dismiss card for certain actions (including commitment confirmation)
+        if (action === 'done' || action === 'snooze' || action === 'skip' || eventType === 'commitment_confirm') {
             handleDismiss(card.id);
         }
     };
@@ -88,11 +143,11 @@ export function DynamicCardsZone() {
 
             {visibleCards.map(card => {
                 switch (card.type) {
-                    case 'focus': return <FocusCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} onDismiss={handleDismiss} />;
-                    case 'todo': return <TodoLiteCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} onDismiss={handleDismiss} />;
-                    case 'reflection': return <ReflectionCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} onDismiss={handleDismiss} />;
-                    case 'habit': return <HabitCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} onDismiss={handleDismiss} />;
-                    case 'goal': return <GoalCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} onDismiss={handleDismiss} />;
+                    case 'focus': return <FocusCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
+                    case 'todo': return <TodoLiteCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
+                    case 'reflection': return <ReflectionCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
+                    case 'habit': return <HabitCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
+                    case 'goal': return <GoalCard key={card.id} data={card} onAction={(action) => handleAction(action, card)} />;
                     default: return null;
                 }
             })}

@@ -1,12 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import { CommitmentDAO, type CreateCommitmentParams, type GetCommitmentsOptions } from '../db/daos/CommitmentDAO';
 import type { Commitment } from '../db/daos/CommitmentDAO';
+import type { AIService } from '../ai-service';
 
 /**
  * Service layer for Commitment business logic
  */
 export class CommitmentService {
-    constructor(private commitmentDAO: CommitmentDAO) {}
+    constructor(
+        private commitmentDAO: CommitmentDAO,
+        private aiService?: AIService
+    ) {}
 
     /**
      * Add a single commitment
@@ -46,6 +50,11 @@ export class CommitmentService {
             triggerCaptureId,
             sourceWindowDays,
             llmRunId,
+            confirmedAt: null,
+            timeHorizonType: null,
+            timeHorizonValue: null,
+            cadenceDays: null,
+            checkInMethod: null,
         };
 
         this.commitmentDAO.create(params);
@@ -94,7 +103,76 @@ export class CommitmentService {
     }
 
     /**
+     * Confirm a potential commitment from feed item
+     * Creates an active commitment with structured time horizon fields
+     */
+    async confirmCommitment(
+        userId: string,
+        originEntryId: string,
+        confirmationText: string,
+        feedItemMetadata?: Record<string, unknown>
+    ): Promise<string> {
+        // Parse commitment details from text using LLM
+        let commitmentDetails;
+        if (this.aiService) {
+            commitmentDetails = await this.aiService.parseCommitmentDetails(confirmationText, feedItemMetadata);
+        } else {
+            // Fallback to basic parsing
+            const { parseTimeHorizonFromText } = await import('../time-horizon-parser');
+            const timeHorizon = parseTimeHorizonFromText(confirmationText);
+            commitmentDetails = {
+                content: confirmationText,
+                strength: (feedItemMetadata?.detected_strength as "weak" | "medium" | "strong") || "medium",
+                horizon: (feedItemMetadata?.detected_horizon as "short" | "medium" | "long") || "medium",
+                time_horizon_type: timeHorizon.time_horizon_type,
+                time_horizon_value: timeHorizon.time_horizon_value,
+                cadence_days: timeHorizon.cadence_days,
+                check_in_method: (feedItemMetadata?.check_in_method as "review" | "metric" | "reminder" | "task_completion") || null,
+                consequence_level: (feedItemMetadata?.consequence_level as "soft" | "medium" | "hard") || undefined
+            };
+        }
+
+        const maxVersion = this.commitmentDAO.getMaxVersion(userId, originEntryId);
+        const newVersion = maxVersion + 1;
+        const now = Date.now();
+
+        // Set expires_at if time_horizon_type is "date"
+        const expiresAt = commitmentDetails.time_horizon_type === "date" && commitmentDetails.time_horizon_value
+            ? commitmentDetails.time_horizon_value
+            : null;
+
+        const id = uuidv4();
+        const params: CreateCommitmentParams = {
+            id,
+            userId,
+            originEntryId,
+            content: commitmentDetails.content,
+            strength: commitmentDetails.strength,
+            horizon: commitmentDetails.horizon,
+            status: "active", // confirmed = active immediately
+            createdAt: now,
+            expiresAt,
+            lastAcknowledgedAt: now,
+            progressScore: 0.0,
+            sourceType: "user",
+            version: newVersion,
+            triggerCaptureId: null,
+            sourceWindowDays: null,
+            llmRunId: null,
+            confirmedAt: now,
+            timeHorizonType: commitmentDetails.time_horizon_type,
+            timeHorizonValue: commitmentDetails.time_horizon_value,
+            cadenceDays: commitmentDetails.cadence_days,
+            checkInMethod: commitmentDetails.check_in_method,
+        };
+
+        this.commitmentDAO.create(params);
+        return id;
+    }
+
+    /**
      * Update commitment status by creating a new version
+     * Validates state transitions
      */
     updateCommitmentStatus(
         userId: string,
@@ -108,6 +186,20 @@ export class CommitmentService {
         const currentCommitment = commitments.find(c => c.id === commitmentId);
         if (!currentCommitment) {
             throw new Error(`Commitment ${commitmentId} not found`);
+        }
+
+        // Validate state transitions
+        const validTransitions: Record<string, string[]> = {
+            "confirmed": ["active", "retired"],
+            "active": ["completed", "retired", "renegotiated"],
+            "completed": [], // Terminal state
+            "retired": [], // Terminal state
+            "renegotiated": ["active", "completed", "retired"]
+        };
+
+        const allowedStatuses = validTransitions[currentCommitment.status] || [];
+        if (newStatus !== currentCommitment.status && !allowedStatuses.includes(newStatus)) {
+            throw new Error(`Invalid state transition from ${currentCommitment.status} to ${newStatus}`);
         }
 
         // Create new version with updated status
@@ -125,13 +217,18 @@ export class CommitmentService {
             status: newStatus,
             createdAt: now,
             expiresAt: currentCommitment.expires_at,
-            lastAcknowledgedAt: newStatus === 'acknowledged' || newStatus === 'active' ? now : currentCommitment.last_acknowledged_at,
+            lastAcknowledgedAt: newStatus === 'active' || newStatus === 'confirmed' ? now : currentCommitment.last_acknowledged_at,
             progressScore: updateProgress ? Math.min(1.0, currentCommitment.progress_score + 0.1) : currentCommitment.progress_score,
             sourceType: currentCommitment.source_type,
             version: newVersion,
             triggerCaptureId: currentCommitment.trigger_capture_id,
             sourceWindowDays: currentCommitment.source_window_days,
             llmRunId: currentCommitment.llm_run_id,
+            confirmedAt: currentCommitment.confirmed_at,
+            timeHorizonType: currentCommitment.time_horizon_type,
+            timeHorizonValue: currentCommitment.time_horizon_value,
+            cadenceDays: currentCommitment.cadence_days,
+            checkInMethod: currentCommitment.check_in_method,
         };
 
         this.commitmentDAO.create(params);

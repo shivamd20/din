@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { trpc } from '../lib/trpc';
 import { format, isToday, isTomorrow, startOfDay, addDays } from 'date-fns';
-import { CheckSquare2, Loader2, Play, MoreVertical, Clock } from 'lucide-react';
+import { CheckSquare2, Loader2, Play, MoreVertical, Clock, Target, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCapture } from '@/contexts/CaptureContext';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // Task type inferred from the API response
 type Task = {
@@ -14,13 +15,16 @@ type Task = {
     planned_date: number | null;
     duration_minutes: number;
     preferred_window: string | null;
+    commitment_id: string | null;
     [key: string]: unknown;
 };
 
 function TaskItem({ task, onAction }: { task: Task; onAction: (action: string, task: Task) => void }) {
     const [showMenu, setShowMenu] = useState(false);
+    const navigate = useNavigate();
     const dueDate = task.planned_date ? new Date(task.planned_date) : null;
     const isCompleted = task.status === 'completed' || task.status === 'cancelled';
+    const hasCommitment = task.commitment_id !== null && task.commitment_id !== undefined;
 
     return (
         <div className={cn(
@@ -42,7 +46,17 @@ function TaskItem({ task, onAction }: { task: Task; onAction: (action: string, t
                     </p>
 
                     {/* Metadata */}
-                    <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
+                    <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400 flex-wrap">
+                        {hasCommitment && (
+                            <button
+                                onClick={() => navigate('/commitments')}
+                                className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-full border border-purple-200/50 transition-colors"
+                            >
+                                <Target className="w-3 h-3" />
+                                <span>Commitment</span>
+                                <ExternalLink className="w-3 h-3 opacity-60" />
+                            </button>
+                        )}
                         {task.duration_minutes && (
                             <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />

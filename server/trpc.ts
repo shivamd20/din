@@ -42,10 +42,13 @@ export const appRouter = t.router({
                 rootId: z.string().optional(),
                 parentId: z.string().optional(),
                 followUp: z.any().optional(), // Provenance data
-                event_type: z.enum(['task_start', 'task_snooze', 'task_skip', 'task_finish', 'commitment_acknowledge', 'commitment_complete', 'commitment_cancel', 'clarification_response']).optional(),
+                event_type: z.enum(['task_start', 'task_snooze', 'task_skip', 'task_finish', 'commitment_acknowledge', 'commitment_complete', 'commitment_cancel', 'commitment_confirm', 'clarification_response']).optional(),
                 linked_task_id: z.string().optional(),
                 linked_commitment_id: z.string().optional(),
                 event_payload: z.record(z.string(), z.any()).optional(),
+                feed_item_id: z.string().nullable().optional(),
+                action_type: z.string().nullable().optional(),
+                action_context: z.record(z.string(), z.any()).optional(),
             }))
             .mutation(async ({ ctx, input }) => {
                 // Map legacy input to addEntry options
@@ -57,7 +60,10 @@ export const appRouter = t.router({
                     linkedTaskId: input.linked_task_id,
                     linkedCommitmentId: input.linked_commitment_id,
                     eventType: input.event_type,
-                    payload: input.event_payload
+                    payload: input.event_payload,
+                    feedItemId: input.feed_item_id,
+                    actionType: input.action_type,
+                    actionContext: input.action_context
                 });
 
                 // Return empty structure to satisfy legacy UI

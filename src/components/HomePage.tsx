@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { CaptureZone } from './home/CaptureZone';
 import { ContextStrip } from './home/ContextStrip';
+import { RecentActivityStrip } from './home/RecentActivityStrip';
 import { DynamicCardsZone } from './home/DynamicCardsZone';
 import { getMicrocopy } from '@/lib/microcopy';
+import { useRecentActivity } from '@/hooks/use-recent-activity';
 
 export default function HomePage() {
     const [layoutState, setLayoutState] = useState<'IDLE' | 'CAPTURED'>('IDLE');
     const [confirmationMsg, setConfirmationMsg] = useState("Captured.");
+    const { shouldShow, recentEntries, count, latestEntry, hasUnsynced } = useRecentActivity();
+    const [stripHidden, setStripHidden] = useState(false);
 
     const handleCapture = () => {
         setLayoutState('CAPTURED');
@@ -32,9 +36,19 @@ export default function HomePage() {
                         <CaptureZone onCapture={handleCapture} />
                     </div>
 
-                    {/* 2. Context Strip */}
+                    {/* 2. Context Strip or Recent Activity Strip */}
                     <div className="shrink-0 z-30 sticky top-0">
-                        <ContextStrip />
+                        {shouldShow && !stripHidden ? (
+                            <RecentActivityStrip
+                                entries={recentEntries}
+                                count={count}
+                                latestEntry={latestEntry}
+                                hasUnsynced={hasUnsynced}
+                                onHideChange={setStripHidden}
+                            />
+                        ) : (
+                            <ContextStrip />
+                        )}
                     </div>
 
                     {/* 3. Feed Cards Zone (Scrollable, limited visible) */}

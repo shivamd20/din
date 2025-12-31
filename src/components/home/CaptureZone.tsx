@@ -88,6 +88,11 @@ export function CaptureZone({ onCapture }: CaptureZoneProps) {
                 parentId: undefined,
             });
 
+            // Haptic feedback on successful capture
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(50); // 50ms subtle pulse
+            }
+
             setText('');
             setAttachments([]);
             localStorage.removeItem('din-draft');

@@ -16,6 +16,9 @@ export interface Entry {
     location: string | null;
     mood: string | null;
     energy_level: number | null;
+    feed_item_id: string | null;
+    action_type: string | null;
+    action_context: string | null;
     [key: string]: SqlStorageValue;
 }
 
@@ -35,6 +38,9 @@ export interface CreateEntryParams {
     location: string | null;
     mood: string | null;
     energyLevel: number | null;
+    feedItemId: string | null;
+    actionType: string | null;
+    actionContext: string | null;
 }
 
 /**
@@ -71,7 +77,10 @@ export class EntryDAO {
             params.payloadJson,
             params.location,
             params.mood,
-            params.energyLevel
+            params.energyLevel,
+            params.feedItemId,
+            params.actionType,
+            params.actionContext
         );
     }
 

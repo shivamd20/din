@@ -34,13 +34,6 @@ describe('Workflow Integration Tests', () => {
         // Wait for workflows to process
         await delay(10000);
 
-        // Check that signals were generated
-        const signals = await client.signals.list.query({
-            include_history: false
-        });
-
-        expect(Array.isArray(signals)).toBe(true);
-
         // Check commitments
         const commitments = await client.commitments.list.query({
             include_history: false
@@ -56,27 +49,5 @@ describe('Workflow Integration Tests', () => {
         expect(Array.isArray(tasks)).toBe(true);
     });
 
-    it('should handle workflow with custom window', async () => {
-        const entry = await client.entries.mutate({
-            text: 'Test entry for 7 day window',
-            source: 'test'
-        });
-
-        const result = await client.signalsGenerate.mutate({
-            window_days: 7,
-            trigger_capture_id: entry.entry_id
-        });
-
-        expect(result.success).toBe(true);
-
-        // Wait for processing
-        await delay(5000);
-
-        const signals = await client.signals.list.query({
-            include_history: false
-        });
-
-        expect(Array.isArray(signals)).toBe(true);
-    });
 });
 

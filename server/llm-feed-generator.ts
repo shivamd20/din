@@ -42,7 +42,6 @@ const FeedOutputSchema = z.object({
     generation_reason: z.string().optional(),
     related_task_id: z.string().nullable().optional(),
     related_commitment_id: z.string().nullable().optional(),
-    related_signal_ids: z.array(z.string()).optional(),
     source_entry_ids: z.array(z.string()).optional(),
     priority_score: z.number().min(0).max(1).optional(),
     expires_at: z.number().nullable().optional(),
@@ -98,7 +97,6 @@ export interface FeedItem {
   generation_reason?: string;
   related_task_id?: string | null;
   related_commitment_id?: string | null;
-  related_signal_ids?: string[];
   source_entry_ids?: string[];
   priority_score?: number;
   expires_at?: number | null;
@@ -374,7 +372,6 @@ export async function generateFeed(
       generation_reason: item.generation_reason,
       related_task_id: item.related_task_id ?? null,
       related_commitment_id: item.related_commitment_id ?? null,
-      related_signal_ids: item.related_signal_ids ?? [],
       source_entry_ids: item.source_entry_ids ?? item.related_entry_ids ?? [],
       priority_score: priorityScore,
       expires_at: item.expires_at ?? null,

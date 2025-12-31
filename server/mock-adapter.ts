@@ -353,19 +353,14 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
             return JSON.stringify({ items: phrasedItems });
         }
 
-        // Handle batch signals/commitments/tasks generation
+        // Handle batch commitments/tasks generation
         if (userContent.includes('analyzing user captures') || 
-            (userContent.includes('signals') && userContent.includes('commitments') && userContent.includes('tasks'))) {
+            (userContent.includes('commitments') && userContent.includes('tasks'))) {
             // Extract entry IDs from the message if possible
             const entryIdMatches = lastUserMessage.content.match(/ID: ([a-f0-9-]+)/gi);
             const entryIds = entryIdMatches ? entryIdMatches.map(m => m.replace('ID: ', '')) : ['mock-entry-1', 'mock-entry-2'];
             
             return JSON.stringify({
-                signals: entryIds.slice(0, 2).flatMap(entryId => [
-                    { entry_id: entryId, key: 'actionability', value: 0.5, confidence: 0.8 },
-                    { entry_id: entryId, key: 'temporal_proximity', value: 0.6, confidence: 0.7 },
-                    { entry_id: entryId, key: 'consequence_strength', value: 0.4, confidence: 0.75 },
-                ]),
                 commitments: entryIds.slice(0, 1).map(entryId => ({
                     origin_entry_id: entryId,
                     strength: 'medium',
@@ -376,19 +371,6 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
                     { content: 'Complete mock task from batch processing', priority: 'high' },
                     { content: 'Follow up on mock task', priority: 'medium', due_date: Date.now() + 7 * 24 * 60 * 60 * 1000 }
                 ]
-            });
-        }
-
-        // Handle structured output requests (single entry signals)
-        if (userContent.includes('extract') || userContent.includes('signal') || userContent.includes('json')) {
-            return JSON.stringify({
-                actionability: 0.5,
-                temporal_proximity: 0.5,
-                consequence_strength: 0.5,
-                external_coupling: 0.5,
-                scope_shortness: 0.5,
-                habit_likelihood: 0.5,
-                tone_stress: 0.5,
             });
         }
 
@@ -525,7 +507,7 @@ export class MockTextAdapter extends BaseTextAdapter<'mock-model', Record<string
                         result[key] = [];
                     }
                 } else if (type === 'number') {
-                    // Return a value between 0 and 1 for signal extraction
+                    // Return a value between 0 and 1 for numeric fields
                     result[key] = 0.5;
                 } else if (type === 'string') {
                     result[key] = `mock-${key}`;

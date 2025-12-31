@@ -31,28 +31,6 @@ export const SCHEMA_QUERIES = {
         CREATE INDEX IF NOT EXISTS idx_entries_linked_commitment ON entries(linked_commitment_id);
     `,
 
-    SIGNALS_TABLE: `
-        CREATE TABLE IF NOT EXISTS signals (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            entry_id TEXT NOT NULL,
-            key TEXT NOT NULL,
-            value REAL NOT NULL,
-            confidence REAL NOT NULL,
-            model TEXT NOT NULL,
-            version INTEGER NOT NULL DEFAULT 1,
-            generated_at INTEGER NOT NULL,
-            expires_at INTEGER,
-            trigger_capture_id TEXT,
-            source_window_days INTEGER,
-            llm_run_id TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_signals_user ON signals(user_id);
-        CREATE INDEX IF NOT EXISTS idx_signals_entry ON signals(entry_id);
-        CREATE INDEX IF NOT EXISTS idx_signals_trigger ON signals(trigger_capture_id);
-        CREATE INDEX IF NOT EXISTS idx_signals_version ON signals(user_id, entry_id, key, version);
-    `,
-
     COMMITMENTS_TABLE: `
         CREATE TABLE IF NOT EXISTS commitments (
             id TEXT PRIMARY KEY,
@@ -225,41 +203,6 @@ export const ENTRY_QUERIES = {
         SELECT * FROM entries 
         WHERE user_id = ? 
         ORDER BY created_at ASC
-    `,
-};
-
-// ============================================================================
-// Signal Queries
-// ============================================================================
-
-export const SIGNAL_QUERIES = {
-    GET_MAX_VERSION: `
-        SELECT MAX(version) as max_version
-        FROM signals
-        WHERE user_id = ? AND entry_id = ? AND key = ?
-    `,
-
-    INSERT: `
-        INSERT INTO signals (
-            id, user_id, entry_id, key, value, confidence, model,
-            version, generated_at, expires_at,
-            trigger_capture_id, source_window_days, llm_run_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-
-    GET_BASE: `SELECT * FROM signals WHERE user_id = ?`,
-
-    GET_LATEST_VERSION: (subWhereConditions: string[]) => `
-        SELECT s1.* FROM signals s1
-        INNER JOIN (
-            SELECT entry_id, key, MAX(version) as max_version
-            FROM signals
-            WHERE ${subWhereConditions.join(' AND ')}
-            GROUP BY entry_id, key
-        ) s2 ON s1.entry_id = s2.entry_id 
-            AND s1.key = s2.key 
-            AND s1.version = s2.max_version
-        WHERE s1.user_id = ?
     `,
 };
 

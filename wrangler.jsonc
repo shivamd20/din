@@ -68,11 +68,6 @@
 	},
 	"workflows": [
 		{
-			"name": "SignalsWorkflow",
-			"binding": "SIGNALS_WORKFLOW",
-			"class_name": "SignalsWorkflow"
-		},
-		{
 			"name": "FeedWorkflow",
 			"binding": "FEED_WORKFLOW",
 			"class_name": "FeedWorkflow"

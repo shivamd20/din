@@ -1,19 +1,15 @@
 import { DurableObject } from "cloudflare:workers";
-import type { WorkflowParams } from "./SignalsWorkflow";
 import { SCHEMA_QUERIES } from "./db/queries";
 import {
     EntryDAO,
-    SignalDAO,
     CommitmentDAO,
     TaskDAO,
     FeedDAO,
-    type Signal,
     type Commitment,
     type Task,
 } from "./db/daos";
 import {
     EntryService,
-    SignalService,
     CommitmentService,
     TaskService,
     FeedService,
@@ -35,7 +31,6 @@ export interface FeedItemRendered {
     generation_reason?: string;
     related_task_id?: string | null;
     related_commitment_id?: string | null;
-    related_signal_ids?: string[];
     source_entry_ids?: string[];
     priority_score?: number;
     expires_at?: number | null;
@@ -59,12 +54,11 @@ export interface Env {
     GEMINI_API_KEY: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     AI: any;
-    SIGNALS_WORKFLOW?: Workflow<WorkflowParams>;
     FEED_WORKFLOW?: Workflow<{ userId: string; triggerCaptureId?: string }>;
 }
 
 // Re-export types for external use
-export type { Signal, Commitment, Task } from "./db/daos";
+export type { Commitment, Task } from "./db/daos";
 export type { Entry } from "./db/daos/EntryDAO";
 
 // ============================================================================
@@ -77,14 +71,12 @@ export class UserDO extends DurableObject<Env> {
     
     // DAOs
     private entryDAO: EntryDAO;
-    private signalDAO: SignalDAO;
     private commitmentDAO: CommitmentDAO;
     private taskDAO: TaskDAO;
     private feedDAO: FeedDAO;
     
     // Services
     private entryService: EntryService;
-    private signalService: SignalService;
     private commitmentService: CommitmentService;
     private taskService: TaskService;
     private feedService: FeedService;
@@ -98,14 +90,12 @@ export class UserDO extends DurableObject<Env> {
 
         // Initialize DAOs
         this.entryDAO = new EntryDAO(this.sql);
-        this.signalDAO = new SignalDAO(this.sql);
         this.commitmentDAO = new CommitmentDAO(this.sql);
         this.taskDAO = new TaskDAO(this.sql);
         this.feedDAO = new FeedDAO(this.sql);
 
         // Initialize Services
         this.entryService = new EntryService(this.entryDAO);
-        this.signalService = new SignalService(this.signalDAO);
         // Initialize AIService lazily (will be created when needed)
         this.aiServicePromise = import('./ai-service').then(({ AIService }) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,7 +111,6 @@ export class UserDO extends DurableObject<Env> {
 
     private initializeSchema() {
         this.sql.exec(SCHEMA_QUERIES.ENTRIES_TABLE);
-        this.sql.exec(SCHEMA_QUERIES.SIGNALS_TABLE);
         this.sql.exec(SCHEMA_QUERIES.COMMITMENTS_TABLE);
         this.sql.exec(SCHEMA_QUERIES.TASKS_TABLE);
         this.sql.exec(SCHEMA_QUERIES.FEED_SNAPSHOTS_TABLE);
@@ -361,22 +350,6 @@ export class UserDO extends DurableObject<Env> {
             );
         }
 
-        // Trigger workflow for background processing (non-blocking)
-        if (this.env.SIGNALS_WORKFLOW) {
-            this.state.waitUntil(
-                this.env.SIGNALS_WORKFLOW.create({
-                    id: `${userId}-${entryId}-${Date.now()}`,
-                    params: {
-                        userId,
-                        triggerCaptureId: entryId,
-                        windowDays: 30,
-                    },
-                }).catch((err: unknown) => {
-                    console.error("Failed to trigger signals workflow:", err);
-                })
-            );
-        }
-
         // Schedule feed regeneration via alarm (batch processing)
         // Instead of immediate regeneration, mark feed as needing update and schedule alarm
         this.scheduleFeedBatchProcessing(userId);
@@ -402,45 +375,6 @@ export class UserDO extends DurableObject<Env> {
 
     async getLastProcessedEntryId(userId: string): Promise<string | null> {
         return this.feedService.getLastProcessedEntryId(userId);
-    }
-
-    // ========================================================================
-    // Signals Methods - Direct RPC (for tRPC and Workflows)
-    // ========================================================================
-
-    async getSignals(
-        userId: string,
-        options: {
-            entry_id?: string;
-            trigger_capture_id?: string;
-            include_history?: boolean;
-            window_days?: number;
-        }
-    ): Promise<Signal[]> {
-        return this.signalService.getSignals(userId, options);
-    }
-
-    async addSignalsBatch(
-        userId: string,
-        signals: Array<{
-            entry_id: string;
-            key: string;
-            value: number;
-            confidence: number;
-        }>,
-        model: string,
-        triggerCaptureId: string,
-        sourceWindowDays: number,
-        llmRunId: string
-    ): Promise<string[]> {
-        return this.signalService.addSignalsBatch(
-                userId,
-            signals,
-                model,
-                triggerCaptureId,
-                sourceWindowDays,
-                llmRunId
-            );
     }
 
     // ========================================================================

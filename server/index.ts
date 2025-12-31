@@ -1,11 +1,10 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { UserDO } from "./UserDO";
-import { SignalsWorkflow } from "./SignalsWorkflow";
 import { FeedWorkflow } from "./FeedWorkflow";
 import { createAuth } from "./auth";
 import { appRouter, type Context } from "./trpc";
 
-export { UserDO, SignalsWorkflow, FeedWorkflow };
+export { UserDO, FeedWorkflow };
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
@@ -94,7 +93,6 @@ export default {
 				createContext: (): Context => ({
 					userId,
 					userDO,
-					signalsWorkflow: env.SIGNALS_WORKFLOW,
 					feedWorkflow: env.FEED_WORKFLOW,
 				}),
 			});

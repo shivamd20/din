@@ -54,7 +54,6 @@ function mapFeedItemToCard(item: {
     generation_reason?: string;
     related_task_id?: string | null;
     related_commitment_id?: string | null;
-    related_signal_ids?: string[];
     source_entry_ids?: string[];
     priority_score?: number;
     expires_at?: number | null;

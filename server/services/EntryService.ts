@@ -104,8 +104,7 @@ export class EntryService {
                 type: 'entry',
                 text: entry.text,
                 score,
-                actions: [],
-                signals: {}
+                actions: []
             };
         }).filter(c => c.score >= 0.45)
             .sort((a, b) => b.score - a.score)

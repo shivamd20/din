@@ -2,14 +2,12 @@ import { initTRPC } from '@trpc/server';
 import { z } from 'zod';
 import type { UserDO } from './UserDO';
 import type { Entry } from './UserDO';
-import type { WorkflowParams } from './SignalsWorkflow';
 import type { FeedWorkflowParams } from './FeedWorkflow';
 import type { TimelineData } from './services';
 
 export interface Context {
     userId: string;
     userDO: DurableObjectStub<UserDO>;
-    signalsWorkflow?: Workflow<WorkflowParams>;
     feedWorkflow?: Workflow<FeedWorkflowParams>;
 }
 
@@ -103,19 +101,6 @@ export const appRouter = t.router({
             }),
     }),
 
-    signals: t.router({
-        list: t.procedure
-            .input(z.object({
-                entry_id: z.string().optional(),
-                trigger_capture_id: z.string().optional(),
-                include_history: z.boolean().optional().default(false),
-                window_days: z.number().optional(),
-            }))
-            .query(async ({ ctx, input }) => {
-                return await ctx.userDO.getSignals(ctx.userId, input);
-            }),
-    }),
-
     commitments: t.router({
         list: t.procedure
             .input(z.object({
@@ -179,33 +164,6 @@ export const appRouter = t.router({
                 return await ctx.userDO.getTimeline(ctx.userId, input);
             }),
     }),
-
-    signalsGenerate: t.procedure
-        .input(z.object({
-            window_days: z.number().optional().default(30),
-            trigger_capture_id: z.string().optional(),
-        }))
-        .mutation(async ({ ctx, input }) => {
-            const recentEntries = await ctx.userDO.getRecentEntries(1) as Entry[];
-            const triggerId = input.trigger_capture_id || recentEntries[0]?.id;
-            if (!triggerId) {
-                throw new Error('No capture found to trigger generation');
-            }
-            // Trigger workflow (optional - may not be available in all environments)
-            if (ctx.signalsWorkflow) {
-                await ctx.signalsWorkflow.create({
-                    id: `${ctx.userId}-${triggerId}-${Date.now()}`,
-                    params: {
-                        userId: ctx.userId,
-                        triggerCaptureId: triggerId,
-                        windowDays: input.window_days || 30,
-                    },
-                });
-            } else {
-                console.warn('Signals workflow not available - skipping workflow trigger');
-            }
-            return { success: true };
-        }),
 
     feed: t.router({
         getCurrent: t.procedure

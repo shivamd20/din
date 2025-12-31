@@ -2,25 +2,7 @@ import { z } from 'zod';
 import { chat } from '@tanstack/ai';
 import { AIModel } from './ai-model';
 
-export const SignalSchema = z.object({
-    actionability: z.number().min(0).max(1),
-    temporal_proximity: z.number().min(0).max(1),
-    consequence_strength: z.number().min(0).max(1),
-    external_coupling: z.number().min(0).max(1),
-    scope_shortness: z.number().min(0).max(1),
-    habit_likelihood: z.number().min(0).max(1),
-    tone_stress: z.number().min(0).max(1),
-});
-
-export type Signals = z.infer<typeof SignalSchema>;
-
-export const SignalsCommitmentsTasksSchema = z.object({
-    signals: z.array(z.object({
-        entry_id: z.string(),
-        key: z.string(),
-        value: z.number().min(0).max(1),
-        confidence: z.number().min(0).max(1)
-    })),
+export const CommitmentsTasksSchema = z.object({
     commitments: z.array(z.object({
         origin_entry_id: z.string(),
         strength: z.string(),
@@ -34,7 +16,7 @@ export const SignalsCommitmentsTasksSchema = z.object({
     }))
 });
 
-export type SignalsCommitmentsTasks = z.infer<typeof SignalsCommitmentsTasksSchema>;
+export type CommitmentsTasks = z.infer<typeof CommitmentsTasksSchema>;
 
 export const CommitmentDetailsSchema = z.object({
     content: z.string(),
@@ -59,17 +41,13 @@ export class AIService {
         this.model = new AIModel(env);
     }
 
-    async extractSignals(text: string): Promise<Signals> {
-        return this.model.extractSignals(text);
-    }
-
     /**
-     * Generate signals, commitments, and tasks from a window of captures using TanStack AI
+     * Generate commitments and tasks from a window of captures using TanStack AI
      */
-    async generateSignalsCommitmentsTasks(
+    async generateCommitmentsTasks(
         captures: Array<{ id: string; text: string; created_at: number }>,
         windowDays: number
-    ): Promise<SignalsCommitmentsTasks> {
+    ): Promise<CommitmentsTasks> {
         // Format captures chronologically for the prompt
         const formattedCaptures = captures
             .sort((a, b) => a.created_at - b.created_at)
@@ -85,9 +63,8 @@ Given the following captures in chronological order:
 ${formattedCaptures}
 
 Generate:
-1. Signals: Extract signal values (actionability, temporal_proximity, consequence_strength, external_coupling, scope_shortness, habit_likelihood, tone_stress) for each capture entry_id. Each signal should have entry_id, key, value (0-1), and confidence (0-1).
-2. Commitments: Identify commitments the user has made, linked to origin_entry_id. Each commitment should have origin_entry_id, strength, horizon, and content (human-readable description).
-3. Tasks: Extract actionable tasks with priorities and optional due dates. Each task should have content (human-readable description), optional priority, and optional due_date (timestamp).
+1. Commitments: Identify commitments the user has made, linked to origin_entry_id. Each commitment should have origin_entry_id, strength, horizon, and content (human-readable description).
+2. Tasks: Extract actionable tasks with priorities and optional due dates. Each task should have content (human-readable description), optional priority, and optional due_date (timestamp).
 
 Return structured data matching the provided schema.`;
 
@@ -101,12 +78,12 @@ Return structured data matching the provided schema.`;
                     role: 'user',
                     content: prompt
                 }],
-                outputSchema: SignalsCommitmentsTasksSchema
+                outputSchema: CommitmentsTasksSchema
             });
 
             return result;
         } catch (error) {
-            console.error('Failed to generate signals/commitments/tasks:', error);
+            console.error('Failed to generate commitments/tasks:', error);
             // Retry once
             try {
                 const result = await chat({
@@ -115,14 +92,13 @@ Return structured data matching the provided schema.`;
                         role: 'user',
                         content: prompt
                     }],
-                    outputSchema: SignalsCommitmentsTasksSchema
+                    outputSchema: CommitmentsTasksSchema
                 });
                 return result;
             } catch (retryError) {
                 console.error('Retry also failed:', retryError);
                 // Return empty structure on failure
                 return {
-                    signals: [],
                     commitments: [],
                     tasks: []
                 };

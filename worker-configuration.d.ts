@@ -20,7 +20,6 @@ declare namespace Cloudflare {
 		liva_db: D1Database;
 		ANTHROPIC_API_KEY: SecretsStoreSecret;
 		AI: Ai;
-		SIGNALS_WORKFLOW: Workflow<Parameters<import("./server/index").SignalsWorkflow['run']>[0]['payload']>;
 		FEED_WORKFLOW: Workflow<Parameters<import("./server/index").FeedWorkflow['run']>[0]['payload']>;
 	}
 }

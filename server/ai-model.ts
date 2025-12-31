@@ -1,7 +1,6 @@
 import { chat } from '@tanstack/ai';
 import { anthropicText } from './anthropic-adapter';
 import { geminiText } from '@tanstack/ai-gemini';
-import { SignalSchema, type Signals } from './ai-service';
 import type { AnyTextAdapter } from '@tanstack/ai';
 import type { z } from 'zod';
 
@@ -123,40 +122,6 @@ export class AIModel {
         } as any);
 
         return result as T;
-    }
-
-    /**
-     * Extracts structured signals from user text.
-     */
-    async extractSignals(text: string, provider?: Provider): Promise<Signals> {
-        const adapter = await this.getAdapter(undefined, provider);
-
-        try {
-            const result = await chat({
-                adapter,
-                messages: [
-                    {
-                        role: 'user',
-                        content: `You extract structured signals from user notes. You never infer intent. You assign probabilities. Return ONLY valid JSON with no markdown formatting or code blocks.\n\nText: ${text}\nReturn JSON with keys:\n- actionability\n- temporal_proximity\n- consequence_strength\n- external_coupling\n- scope_shortness\n- habit_likelihood\n- tone_stress\nEach value must be 0–1.`,
-                    },
-                ],
-                outputSchema: SignalSchema,
-            });
-
-            return result;
-        } catch (error) {
-            console.error('Failed to extract signals:', error);
-            // Return default values on error
-            return {
-                actionability: 0,
-                temporal_proximity: 0,
-                consequence_strength: 0,
-                external_coupling: 0,
-                scope_shortness: 0,
-                habit_likelihood: 0,
-                tone_stress: 0,
-            };
-        }
     }
 
     /**

@@ -40,13 +40,13 @@ export USE_MOCK_ADAPTER_DEBUG=true  # Optional
 The mock adapter:
 - Returns reflective responses based on user input
 - Simulates streaming by chunking responses word-by-word
-- Handles structured output requests (like signal extraction)
+- Handles structured output requests
 - Provides realistic delays to simulate network conditions
 
 ### Example Responses
 
 - **Regular chat**: Returns reflective responses like "I hear you saying: [user message]. That's interesting..."
-- **Signal extraction**: Returns mock structured data with all signals set to 0.5
+- **Structured output**: Returns mock structured data for commitments and tasks
 - **Tool requests**: Acknowledges tool usage requests
 
 ### Customization

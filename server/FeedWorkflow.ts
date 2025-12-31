@@ -46,17 +46,16 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
                 }
             );
 
-            // Step 3: Fetch tasks, commitments, and signals for LLM linking
+            // Step 3: Fetch tasks and commitments for LLM linking
             const entityContext = await step.do(
                 "fetch-entities",
                 async () => {
                     const userDO = this.env.USER_DO.get(
                         this.env.USER_DO.idFromName(userId)
                     );
-                    const [tasks, commitments, signals] = await Promise.all([
+                    const [tasks, commitments] = await Promise.all([
                         userDO.getTasks(userId, { include_history: false }),
-                        userDO.getCommitments(userId, { include_history: false }),
-                        userDO.getSignals(userId, { include_history: false })
+                        userDO.getCommitments(userId, { include_history: false })
                     ]);
                     
                     // Determine time of day context
@@ -77,7 +76,6 @@ export class FeedWorkflow extends WorkflowEntrypoint<Env, FeedWorkflowParams> {
                     return {
                         tasks, // Includes both active and completed tasks
                         commitments,
-                        signals,
                         timeOfDay
                     };
                 }

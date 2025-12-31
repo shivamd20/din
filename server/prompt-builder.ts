@@ -1,5 +1,5 @@
 import type { Entry } from './db/daos/EntryDAO';
-import type { Task, Commitment, Signal } from './db/daos';
+import type { Task, Commitment } from './db/daos';
 import { canonicalizePrompt, canonicalizeEntries } from './prompt-canonicalizer';
 import { FROZEN_SYSTEM_PROMPT, FROZEN_OUTPUT_SCHEMA, OUTPUT_SCHEMA_VERSION } from './frozen-prompts';
 
@@ -14,7 +14,6 @@ export interface PromptStructure {
 export interface EntityContext {
   tasks?: Task[];
   commitments?: Commitment[];
-  signals?: Signal[];
   timeOfDay?: string;
   energyLevel?: number;
   location?: string;
@@ -22,7 +21,7 @@ export interface EntityContext {
 
 /**
  * Build prompt with 70-90% frozen prefix + 10-30% variable suffix
- * Includes tasks, commitments, signals, and context for LLM linking
+ * Includes tasks, commitments, and context for LLM linking
  */
 export function buildPrompt(
   allEntries: Entry[],
@@ -89,18 +88,6 @@ export function buildPrompt(
     }
   }
   
-  if (entityContext?.signals && entityContext.signals.length > 0) {
-    const signalsJson = JSON.stringify(entityContext.signals.map(s => ({
-      id: s.id,
-      entry_id: s.entry_id,
-      key: s.key,
-      value: s.value,
-      confidence: s.confidence,
-      generated_at: s.generated_at
-    })), null, 0);
-    entitySections.push(`<RecentSignals count="${entityContext.signals.length}">\n${signalsJson}\n</RecentSignals>`);
-  }
-  
   // Build context section
   const contextParts: string[] = [
     `current_time=${currentTime}`,
@@ -141,7 +128,7 @@ export function buildPrompt(
     ...entitySections,
     completedTasksSection,
     `\n<CurrentContext>\n${contextParts.join('\n')}\n</CurrentContext>`,
-    `\nGenerate the feed now. Use the provided tasks, commitments, and signals to link feed items appropriately via related_task_id, related_commitment_id, and related_signal_ids.
+    `\nGenerate the feed now. Use the provided tasks and commitments to link feed items appropriately via related_task_id and related_commitment_id.
 
 CRITICAL INSTRUCTIONS:
 

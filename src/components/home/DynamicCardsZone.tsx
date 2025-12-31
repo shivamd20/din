@@ -49,8 +49,8 @@ export function DynamicCardsZone() {
         const metadata = card.metadata || {};
         const isPotentialCommitment = metadata.is_potential_commitment === true;
 
-        // Generate smart prefill text based on action and card context
-        let prefillText = '';
+        // Generate action title and metadata (no prefill text - action goes in header)
+        let actionTitle: string | undefined;
         let eventType: 'task_start' | 'task_snooze' | 'task_skip' | 'task_finish' | 'commitment_acknowledge' | 'commitment_complete' | 'commitment_cancel' | 'commitment_confirm' | 'clarification_response' | undefined;
         let guidedPrompt = '';
 
@@ -60,7 +60,7 @@ export function DynamicCardsZone() {
         if (isPotentialCommitment) {
             if (action === 'open_capture') {
                 // This is the "Confirm Commitment" action
-                prefillText = `Confirming commitment: ${content}`;
+                actionTitle = 'Confirm Commitment';
                 eventType = 'commitment_confirm';
                 guidedPrompt = 'Add any details about this commitment (time horizon, check-in method, etc.)';
             } else if (action === 'dismiss' || action === 'skip') {
@@ -74,42 +74,62 @@ export function DynamicCardsZone() {
         if (!eventType && !isPotentialCommitment) {
             switch (action) {
                 case 'start':
-                    prefillText = `Started working on ${content}`;
+                    actionTitle = 'Start Task';
                     eventType = 'task_start';
                     guidedPrompt = 'What are you focusing on for this task?';
                     break;
                 case 'snooze':
-                    prefillText = `Snoozing ${content}. Snooze until?`;
+                    actionTitle = 'Snooze Task';
                     eventType = 'task_snooze';
                     guidedPrompt = 'When should this be rescheduled?';
                     break;
                 case 'skip':
-                    prefillText = `Skipping ${content}`;
+                    actionTitle = 'Skip Task';
                     eventType = 'task_skip';
                     guidedPrompt = 'Why are you skipping this?';
                     break;
                 case 'done':
-                    prefillText = `Finished ${content}`;
+                    actionTitle = 'Mark as Done';
                     eventType = 'task_finish';
                     guidedPrompt = 'What did you accomplish?';
                     break;
                 case 'open_capture':
-                    prefillText = '';
+                    actionTitle = 'Add Note';
                     guidedPrompt = generationReason ? `About: ${generationReason}` : 'What\'s on your mind?';
                     break;
                 default:
-                    prefillText = content;
+                    actionTitle = 'Capture';
                     guidedPrompt = generationReason ? `Context: ${generationReason}` : '';
             }
         }
 
-        // Build action context with guided prompt and potential commitment metadata
+        // Build comprehensive action context for LLM
         const actionContext: Record<string, unknown> = {
-            guided_prompt: guidedPrompt,
+            // Action information
+            action_taken: action,
+            action_title: actionTitle,
+            
+            // Feed item information
+            feed_item_id: feedItemId,
             card_content: content,
+            card_type: card.type,
+            card_title: card.title,
+            
+            // Related entities
+            related_task_id: relatedTaskId || null,
+            related_commitment_id: relatedCommitmentId || null,
+            
+            // Generation context
             ...(generationReason && { generation_reason: generationReason }),
+            ...((card as any).priority_score && { priority_score: (card as any).priority_score }),
+            ...((card as any).expires_at && { expires_at: (card as any).expires_at }),
+            
+            // User guidance
+            guided_prompt: guidedPrompt,
+            
             // Include potential commitment metadata for LLM parsing
             ...(isPotentialCommitment && {
+                is_potential_commitment: true,
                 detected_strength: metadata.detected_strength,
                 detected_horizon: metadata.detected_horizon,
                 time_horizon_type: metadata.time_horizon_type,
@@ -120,15 +140,15 @@ export function DynamicCardsZone() {
             })
         };
 
-        // Open capture box with prefill and metadata
-        openCapture(prefillText, {
+        // Open capture box with action title in header, empty textarea, and comprehensive metadata
+        openCapture('', {
             event_type: eventType,
             linked_task_id: relatedTaskId || undefined,
             linked_commitment_id: relatedCommitmentId || undefined,
             feed_item_id: feedItemId,
             action_type: action,
             action_context: actionContext
-        });
+        }, actionTitle);
 
         // Dismiss card for certain actions (including commitment confirmation)
         if (action === 'done' || action === 'snooze' || action === 'skip' || eventType === 'commitment_confirm') {

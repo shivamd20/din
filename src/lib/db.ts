@@ -28,11 +28,24 @@ interface Entry {
     // Suggestions from AI (Transient)
     transientSuggestions?: { chipId: string; chipLabel: string; generationId: string }[];
     transientAnalysis?: string;
+
+    // Action and Event Metadata
+    event_type?: string | null;
+    action_type?: string | null;
+    action_context?: string | null; // JSON string
+    feed_item_id?: string | null;
+    linked_task_id?: string | null;
+    linked_commitment_id?: string | null;
 }
 
 const db = new Dexie('DinDB') as Dexie & {
     entries: EntityTable<Entry, 'id'>;
 };
+
+// Version 3: Add metadata fields for action tracking
+db.version(3).stores({
+    entries: 'id, rootId, parentId, created_at, text, synced, feed_item_id, action_type, event_type' // Added metadata indices
+});
 
 // Version 2: Add indices for threading
 db.version(2).stores({

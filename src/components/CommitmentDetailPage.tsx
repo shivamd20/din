@@ -60,9 +60,19 @@ export default function CommitmentDetailPage() {
 
     const handleNextStep = () => {
         if (commitment.next_step) {
+            // This is a suggested next step, not an action - keep prefill
+            const actionContext: Record<string, unknown> = {
+                action_taken: 'next_step',
+                commitment_id: commitment.id,
+                commitment_content: commitment.content,
+                commitment_status: commitment.status,
+                next_step_suggestion: commitment.next_step,
+            };
             openCapture(commitment.next_step, {
                 linked_commitment_id: commitment.id,
-            });
+                action_type: 'next_step',
+                action_context: actionContext,
+            }, 'Next Step');
         }
     };
 

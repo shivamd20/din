@@ -16,7 +16,7 @@ interface Attachment {
 }
 
 export function CaptureBox() {
-    const { isOpen, prefillText, metadata, closeCapture } = useCapture();
+    const { isOpen, prefillText, actionTitle, metadata, closeCapture } = useCapture();
     const { showUndo } = useUndo();
     const [text, setText] = useState('');
     const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -25,10 +25,17 @@ export function CaptureBox() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const createCapture = trpc.log.create.useMutation();
 
+    // Get placeholder from action_context or use default
+    const placeholder = metadata?.action_context?.guided_prompt as string || 
+                       (actionTitle ? 'Add any additional context...' : "What's on your mind?");
+
     // Reset text and attachments when dialog opens/closes
     useEffect(() => {
         if (isOpen) {
-            setText(prefillText);
+            // For actions with titles, textarea should be empty (action is in header, user adds context)
+            // Exception: next_step actions can have prefill as they're suggestions, not action descriptions
+            const isNextStep = metadata?.action_type === 'next_step';
+            setText(actionTitle && !isNextStep ? '' : prefillText);
             setAttachments([]);
             // Focus textarea after a brief delay
             const timer = setTimeout(() => {
@@ -75,7 +82,7 @@ export function CaptureBox() {
         const now = Date.now();
 
         try {
-            // Save locally first
+            // Save locally first with metadata
             await db.entries.add({
                 id: entryId,
                 created_at: now,
@@ -84,6 +91,13 @@ export function CaptureBox() {
                 synced: 0,
                 rootId: entryId,
                 parentId: undefined,
+                // Store metadata fields
+                event_type: metadata?.event_type || null,
+                action_type: metadata?.action_type || null,
+                action_context: metadata?.action_context ? JSON.stringify(metadata.action_context) : null,
+                feed_item_id: metadata?.feed_item_id || null,
+                linked_task_id: metadata?.linked_task_id || null,
+                linked_commitment_id: metadata?.linked_commitment_id || null,
             });
 
             // Haptic feedback on successful capture
@@ -158,7 +172,7 @@ export function CaptureBox() {
             >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-zinc-100">
-                    <h2 className="text-lg font-semibold text-zinc-900">Capture</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900">{actionTitle || 'Capture'}</h2>
                     <button
                         onClick={closeCapture}
                         className="p-2 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 transition-colors"
@@ -174,7 +188,7 @@ export function CaptureBox() {
                         ref={textareaRef}
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="What's on your mind?"
+                        placeholder={placeholder}
                         rows={4}
                         className="w-full bg-transparent text-base leading-relaxed text-zinc-900 placeholder:text-zinc-400 resize-none outline-none min-h-[120px]"
                         style={{ fontFeatureSettings: '"kern"', WebkitFontSmoothing: 'antialiased' }}

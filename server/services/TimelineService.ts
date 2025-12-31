@@ -3,6 +3,7 @@ import type { FeedItemRendered } from '../UserDO';
 
 export interface TimelineItem {
     id: string;
+    item_type: 'task';
     content: string;
     status: 'completed' | 'missed' | 'adjusted';
     completed_at: number | null;
@@ -15,6 +16,24 @@ export interface TimelineItem {
     contributed_to_streak: boolean;
     broke_streak: boolean;
     created_at: number;
+}
+
+export interface TimelineEntryItem {
+    id: string;
+    item_type: 'entry';
+    content: string; // entry.text
+    created_at: number;
+    action_type: string | null;
+    action_context: Record<string, unknown> | null;
+    feed_item_id: string | null;
+    event_type: string | null;
+    linked_task_id: string | null;
+    linked_commitment_id: string | null;
+    commitment_content: string | null;
+    // Visual metadata
+    action_title?: string; // From action_context.action_title
+    card_content?: string; // From action_context.card_content
+    generation_reason?: string; // From action_context.generation_reason
 }
 
 export interface TodayItem {
@@ -59,8 +78,10 @@ export interface StreakSummary {
     description: string;
 }
 
+export type TimelinePastItem = TimelineItem | TimelineEntryItem;
+
 export interface TimelineData {
-    past: TimelineItem[];
+    past: TimelinePastItem[];
     today: TodayItem[];
     future: FutureProjection[];
     insights: {
@@ -118,15 +139,73 @@ export class TimelineService {
     }
 
     /**
-     * Build Past section from completed/abandoned tasks
+     * Build entry timeline items from entries
+     */
+    private buildEntryTimelineItems(
+        entries: Entry[],
+        commitments: Commitment[]
+    ): TimelineEntryItem[] {
+        const entryItems: TimelineEntryItem[] = [];
+
+        for (const entry of entries) {
+            // Parse action_context if present
+            let actionContext: Record<string, unknown> | null = null;
+            let actionTitle: string | undefined;
+            let cardContent: string | undefined;
+            let generationReason: string | undefined;
+
+            if (entry.action_context) {
+                try {
+                    actionContext = typeof entry.action_context === 'string'
+                        ? JSON.parse(entry.action_context)
+                        : entry.action_context as Record<string, unknown>;
+                    
+                    if (actionContext) {
+                        actionTitle = actionContext.action_title as string | undefined;
+                        cardContent = actionContext.card_content as string | undefined;
+                        generationReason = actionContext.generation_reason as string | undefined;
+                    }
+                } catch {
+                    // Invalid JSON, skip action_context
+                }
+            }
+
+            // Find related commitment
+            const commitment = entry.linked_commitment_id
+                ? commitments.find(c => c.id === entry.linked_commitment_id)
+                : null;
+
+            entryItems.push({
+                id: entry.id,
+                item_type: 'entry',
+                content: entry.text,
+                created_at: entry.created_at,
+                action_type: entry.action_type,
+                action_context: actionContext,
+                feed_item_id: entry.feed_item_id,
+                event_type: entry.event_type,
+                linked_task_id: entry.linked_task_id,
+                linked_commitment_id: entry.linked_commitment_id,
+                commitment_content: commitment?.content || null,
+                action_title: actionTitle,
+                card_content: cardContent,
+                generation_reason: generationReason,
+            });
+        }
+
+        return entryItems;
+    }
+
+    /**
+     * Build Past section from completed/abandoned tasks and entries
      */
     private buildPastSection(
         tasks: Task[],
         entries: Entry[],
         commitments: Commitment[]
-    ): TimelineItem[] {
+    ): TimelinePastItem[] {
         const now = Date.now();
-        const pastItems: TimelineItem[] = [];
+        const pastItems: TimelinePastItem[] = [];
 
         // Get all task versions, group by content, take latest version
         const taskMap = new Map<string, Task>();
@@ -154,16 +233,20 @@ export class TimelineService {
                 const isMissed = task.status === 'abandoned' || 
                     (task.planned_date && task.planned_date < now && task.status !== 'completed');
 
+                // Convert undefined to null for commitment
+                const commitmentOrNull = commitment ?? null;
+
                 // Detect streak contribution
-                const contributedToStreak = this.didContributeToStreak(task, commitment, entries);
-                const brokeStreak = this.didBreakStreak(task, commitment, entries);
+                const contributedToStreak = this.didContributeToStreak(task, commitmentOrNull, entries);
+                const brokeStreak = this.didBreakStreak(task, commitmentOrNull, entries);
 
                 // Generate contextual note
-                const contextualNote = this.generateContextualNote(task, relatedEntries, commitment);
+                const contextualNote = this.generateContextualNote(task, relatedEntries, commitmentOrNull);
                 const whyMissed = isMissed ? this.generateWhyMissed(task, relatedEntries) : null;
 
                 pastItems.push({
                     id: task.id,
+                    item_type: 'task',
                     content: task.content,
                     status: task.status === 'completed' ? 'completed' : isMissed ? 'missed' : 'adjusted',
                     completed_at: task.status === 'completed' ? task.created_at : null,
@@ -179,6 +262,12 @@ export class TimelineService {
                 });
             }
         }
+
+        // Build entry timeline items
+        const entryItems = this.buildEntryTimelineItems(entries, commitments);
+
+        // Merge entry items with task items
+        pastItems.push(...entryItems);
 
         // Sort by date (most recent first)
         return pastItems.sort((a, b) => b.created_at - a.created_at);
@@ -426,27 +515,29 @@ export class TimelineService {
      * Detect patterns in past behavior
      */
     private detectPatterns(
-        pastItems: TimelineItem[],
+        pastItems: TimelinePastItem[],
         allTasks: Task[],
         entries: Entry[]
     ): PatternInsight[] {
         const insights: PatternInsight[] = [];
 
-        // Day of week patterns
+        // Day of week patterns (only for task items)
         const dayOfWeekCounts = new Map<number, { completed: number; missed: number }>();
         for (const item of pastItems) {
-            if (item.completed_at) {
-                const date = new Date(item.completed_at);
-                const dayOfWeek = date.getDay();
-                const counts = dayOfWeekCounts.get(dayOfWeek) || { completed: 0, missed: 0 };
-                counts.completed++;
-                dayOfWeekCounts.set(dayOfWeek, counts);
-            } else if (item.status === 'missed') {
-                const date = new Date(item.created_at);
-                const dayOfWeek = date.getDay();
-                const counts = dayOfWeekCounts.get(dayOfWeek) || { completed: 0, missed: 0 };
-                counts.missed++;
-                dayOfWeekCounts.set(dayOfWeek, counts);
+            if (item.item_type === 'task') {
+                if (item.completed_at) {
+                    const date = new Date(item.completed_at);
+                    const dayOfWeek = date.getDay();
+                    const counts = dayOfWeekCounts.get(dayOfWeek) || { completed: 0, missed: 0 };
+                    counts.completed++;
+                    dayOfWeekCounts.set(dayOfWeek, counts);
+                } else if (item.status === 'missed') {
+                    const date = new Date(item.created_at);
+                    const dayOfWeek = date.getDay();
+                    const counts = dayOfWeekCounts.get(dayOfWeek) || { completed: 0, missed: 0 };
+                    counts.missed++;
+                    dayOfWeekCounts.set(dayOfWeek, counts);
+                }
             }
         }
 
@@ -476,15 +567,17 @@ export class TimelineService {
             }
         }
 
-        // Streak patterns
+        // Streak patterns (only for task items)
         let currentStreak = 0;
         let maxStreak = 0;
         for (const item of pastItems.slice().reverse()) {
-            if (item.status === 'completed') {
-                currentStreak++;
-                maxStreak = Math.max(maxStreak, currentStreak);
-            } else if (item.status === 'missed') {
-                currentStreak = 0;
+            if (item.item_type === 'task') {
+                if (item.status === 'completed') {
+                    currentStreak++;
+                    maxStreak = Math.max(maxStreak, currentStreak);
+                } else if (item.status === 'missed') {
+                    currentStreak = 0;
+                }
             }
         }
 
@@ -505,7 +598,7 @@ export class TimelineService {
      */
     private aggregateStreaks(
         commitments: Commitment[],
-        pastItems: TimelineItem[]
+        pastItems: TimelinePastItem[]
     ): StreakSummary[] {
         const summaries: StreakSummary[] = [];
 
@@ -549,7 +642,7 @@ export class TimelineService {
     private generateIdentityHints(
         patterns: PatternInsight[],
         streaks: StreakSummary[],
-        pastItems: TimelineItem[]
+        pastItems: TimelinePastItem[]
     ): string[] {
         const hints: string[] = [];
 
@@ -565,8 +658,9 @@ export class TimelineService {
             hints.push(streak.description);
         }
 
-        // General encouragement
-        const completionRate = pastItems.filter(i => i.status === 'completed').length / Math.max(1, pastItems.length);
+        // General encouragement (only count task items)
+        const taskItems = pastItems.filter((i): i is TimelineItem => i.item_type === 'task');
+        const completionRate = taskItems.filter(i => i.status === 'completed').length / Math.max(1, taskItems.length);
         if (completionRate > 0.6) {
             hints.push("You're becoming someone who finishes things. Keep building this identity.");
         }

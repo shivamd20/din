@@ -13,8 +13,9 @@ export interface CaptureMetadata {
 interface CaptureContextType {
     isOpen: boolean;
     prefillText: string;
+    actionTitle?: string; // Action description for header
     metadata: CaptureMetadata | undefined;
-    openCapture: (prefill?: string, metadata?: CaptureMetadata) => void;
+    openCapture: (prefill?: string, metadata?: CaptureMetadata, actionTitle?: string) => void;
     closeCapture: () => void;
 }
 
@@ -23,17 +24,20 @@ const CaptureContext = createContext<CaptureContextType | undefined>(undefined);
 export function CaptureProvider({ children }: { children: ReactNode }) {
     const [isOpen, setIsOpen] = useState(false);
     const [prefillText, setPrefillText] = useState('');
+    const [actionTitle, setActionTitle] = useState<string | undefined>(undefined);
     const [metadata, setMetadata] = useState<CaptureMetadata | undefined>(undefined);
 
-    const openCapture = useCallback((prefill = '', meta?: CaptureMetadata) => {
+    const openCapture = useCallback((prefill = '', meta?: CaptureMetadata, title?: string) => {
         setPrefillText(prefill);
         setMetadata(meta);
+        setActionTitle(title);
         setIsOpen(true);
     }, []);
 
     const closeCapture = useCallback(() => {
         setIsOpen(false);
         setPrefillText('');
+        setActionTitle(undefined);
         setMetadata(undefined);
     }, []);
 
@@ -42,6 +46,7 @@ export function CaptureProvider({ children }: { children: ReactNode }) {
             value={{
                 isOpen,
                 prefillText,
+                actionTitle,
                 metadata,
                 openCapture,
                 closeCapture,

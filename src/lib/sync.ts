@@ -82,11 +82,28 @@ export async function syncQueue() {
                     rootId: entry.rootId,
                     parentId: entry.parentId,
                     // pass followUp provenance if it exists
-                    followUp: entry.followUp
+                    followUp: entry.followUp,
+                    // Include metadata fields (convert null to undefined for tRPC)
+                    event_type: entry.event_type as any, // tRPC enum validation will handle invalid values
+                    action_type: entry.action_type || undefined,
+                    action_context: entry.action_context ? JSON.parse(entry.action_context) : undefined,
+                    feed_item_id: entry.feed_item_id || undefined,
+                    linked_task_id: entry.linked_task_id || undefined,
+                    linked_commitment_id: entry.linked_commitment_id || undefined,
                 });
 
                 // Mark as synced AND save any followUps returned
-                let updates: any = { synced: 1 };
+                // Preserve metadata fields when updating
+                let updates: any = { 
+                    synced: 1,
+                    // Preserve metadata fields (they should already be in the entry, but ensure they're not lost)
+                    event_type: entry.event_type,
+                    action_type: entry.action_type,
+                    action_context: entry.action_context,
+                    feed_item_id: entry.feed_item_id,
+                    linked_task_id: entry.linked_task_id,
+                    linked_commitment_id: entry.linked_commitment_id,
+                };
 
                 if (result.followUps && result.followUps.length > 0) {
                     // We store them in a temporary field or rely on App.tsx finding them?
@@ -167,7 +184,14 @@ export async function pullFromServer() {
                     attachments: attachments, // Remote attachments will have keys, no blobs
                     synced: 1, // It came from server, so it is synced
                     rootId: (sEntry.root_id ? String(sEntry.root_id) : null) || String(sEntry.entry_id),
-                    parentId: sEntry.parent_id ? String(sEntry.parent_id) : undefined
+                    parentId: sEntry.parent_id ? String(sEntry.parent_id) : undefined,
+                    // Include metadata fields from server
+                    event_type: (sEntry as any).event_type || null,
+                    action_type: (sEntry as any).action_type || null,
+                    action_context: (sEntry as any).action_context || null,
+                    feed_item_id: (sEntry as any).feed_item_id || null,
+                    linked_task_id: (sEntry as any).linked_task_id || null,
+                    linked_commitment_id: (sEntry as any).linked_commitment_id || null,
                 });
             }
         });

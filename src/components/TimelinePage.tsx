@@ -1,9 +1,9 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
 import { ExpandableMarkdown } from "./ExpandableMarkdown";
-import { cn } from "@/lib/utils";
-import { ImageOff, FileText, Loader2, ChevronDown, ChevronUp, Link2, Zap } from "lucide-react";
+import { ImageOff, FileText, Loader2, Link2, Zap, CheckCircle2, Play, Clock, X } from "lucide-react";
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function TimelinePage() {
     const entries = useLiveQuery(() =>
@@ -96,7 +96,7 @@ export default function TimelinePage() {
                             </span>
                         </div>
 
-                        <div className="relative pl-4 sm:pl-0">
+                        <div className="relative sm:pl-0">
                             {/* Dotted Line for Day Group (Desktop) */}
                             <div className="absolute left-[63px] top-6 bottom-0 w-px bg-zinc-100 hidden sm:block" />
                             {/* Line for Mobile */}
@@ -115,7 +115,7 @@ export default function TimelinePage() {
                                     return (
                                         <div key={rootId} className="relative flex flex-col sm:flex-row gap-2 sm:gap-6 group">
                                             {/* Desktop Timeline Left */}
-                                            <div className="hidden sm:flex w-[60px] flex-col items-end pt-1 gap-0.5">
+                                            <div className="hidden sm:flex w-[60px] flex-col items-end pt-1 gap-0.5 pr-3">
                                                 <span className="text-xs text-zinc-400 font-medium tracking-wide leading-tight">{time}</span>
                                                 {period && <span className="text-[10px] text-zinc-300 font-medium tracking-wide leading-tight">{period}</span>}
                                             </div>
@@ -124,8 +124,8 @@ export default function TimelinePage() {
                                             <div className="hidden sm:flex absolute left-[63px] top-[7px] w-2.5 h-2.5 rounded-full bg-white border-2 border-zinc-200 z-10 group-hover:border-zinc-900 transition-colors -translate-x-1/2" />
 
                                             {/* Mobile Time + Dot */}
-                                            <div className="sm:hidden flex items-center gap-3 mb-1 -ml-[21px]">
-                                                <div className="w-2.5 h-2.5 rounded-full bg-white border-2 border-zinc-300 z-10" />
+                                            <div className="sm:hidden flex items-center gap-3 mb-1">
+                                                <div className="w-2.5 h-2.5 rounded-full bg-white border-2 border-zinc-300 z-10 flex-shrink-0" />
                                                 <div className="flex flex-col gap-0.5">
                                                     <span className="text-xs text-zinc-400 font-medium tracking-wide leading-tight">{time}</span>
                                                     {period && <span className="text-[10px] text-zinc-300 font-medium tracking-wide leading-tight">{period}</span>}
@@ -133,7 +133,12 @@ export default function TimelinePage() {
                                             </div>
 
                                             {/* Content Body */}
-                                            <div className="flex-1 min-w-0 pl-1 sm:pl-0">
+                                            <div className="flex-1 min-w-0 sm:pl-0">
+                                                {/* Action Entry Header - if action-based */}
+                                                {isActionBasedEntry(rootEntry) && (
+                                                    <ActionEntryHeader entry={rootEntry} />
+                                                )}
+                                                
                                                 {/* Metadata Badges - Inline */}
                                                 <MetadataBadges entry={rootEntry} />
                                                 
@@ -164,9 +169,6 @@ export default function TimelinePage() {
                                                     </div>
                                                 )}
 
-                                                {/* Metadata Section */}
-                                                <EntryMetadata entry={rootEntry} />
-
                                                 {/* Footer / Status */}
                                                 <div className="mt-3 flex items-center gap-3">
                                                     {rootEntry.synced === 0 && (
@@ -188,21 +190,169 @@ export default function TimelinePage() {
     );
 }
 
+// Helper: Detect if entry is action-based
+function isActionBasedEntry(entry: any): boolean {
+    return !!(entry.action_type || entry.event_type || entry.feed_item_id || entry.action_context);
+}
+
+// Helper: Parse action_context JSON
+function parseActionContext(entry: any): {
+    actionTitle?: string;
+    cardContent?: string;
+    generationReason?: string;
+    actionContext?: Record<string, unknown>;
+} {
+    if (!entry.action_context) return {};
+    
+    try {
+        const context = typeof entry.action_context === 'string'
+            ? JSON.parse(entry.action_context)
+            : entry.action_context;
+        
+        return {
+            actionTitle: context.action_title,
+            cardContent: context.card_content,
+            generationReason: context.generation_reason,
+            actionContext: context,
+        };
+    } catch {
+        return {};
+    }
+}
+
+// Helper: Get action icon and styling
+function getActionIconAndStyle(actionType: string | null | undefined) {
+    if (actionType === 'done' || actionType === 'task_finish') {
+        return { 
+            icon: CheckCircle2, 
+            color: 'text-green-600', 
+            bgColor: 'bg-green-50/50', 
+            borderColor: 'border-green-200/50' 
+        };
+    } else if (actionType === 'start' || actionType === 'task_start') {
+        return { 
+            icon: Play, 
+            color: 'text-blue-600', 
+            bgColor: 'bg-blue-50/50', 
+            borderColor: 'border-blue-200/50' 
+        };
+    } else if (actionType === 'snooze' || actionType === 'task_snooze') {
+        return { 
+            icon: Clock, 
+            color: 'text-amber-600', 
+            bgColor: 'bg-amber-50/50', 
+            borderColor: 'border-amber-200/50' 
+        };
+    } else if (actionType === 'skip' || actionType === 'task_skip') {
+        return { 
+            icon: X, 
+            color: 'text-red-600', 
+            bgColor: 'bg-red-50/50', 
+            borderColor: 'border-red-200/50' 
+        };
+    }
+    return { 
+        icon: FileText, 
+        color: 'text-zinc-500', 
+        bgColor: 'bg-zinc-50/50', 
+        borderColor: 'border-zinc-200/50' 
+    };
+}
+
+// Action Entry Header Component
+function ActionEntryHeader({ entry }: { entry: any }) {
+    const navigate = useNavigate();
+    const { actionTitle, cardContent, generationReason, actionContext } = parseActionContext(entry);
+    const actionType = entry.action_type || entry.event_type;
+    const { icon: ActionIcon, color, bgColor, borderColor } = getActionIconAndStyle(actionType);
+    
+    return (
+        <div className={`mb-3 p-3 rounded-lg border ${borderColor} ${bgColor} space-y-2`}>
+            {/* Action Title and Icon */}
+            <div className="flex items-center gap-2">
+                <ActionIcon className={`w-4 h-4 ${color} flex-shrink-0`} />
+                <div className="flex-1 min-w-0">
+                    {actionTitle ? (
+                        <h3 className="text-[15px] font-semibold text-zinc-900 leading-tight">{actionTitle}</h3>
+                    ) : actionType ? (
+                        <h3 className="text-[15px] font-semibold text-zinc-900 leading-tight">
+                            {actionType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                        </h3>
+                    ) : null}
+                </div>
+            </div>
+            
+            {/* Card Content - what was acted upon */}
+            {cardContent && (
+                <p className="text-[14px] text-zinc-600 italic leading-relaxed pl-6">
+                    "{cardContent}"
+                </p>
+            )}
+            
+            {/* Generation Reason */}
+            {generationReason && (
+                <p className="text-[12px] text-zinc-500 leading-relaxed pl-6">
+                    {generationReason}
+                </p>
+            )}
+            
+            {/* Related Links */}
+            {(entry.linked_commitment_id || entry.linked_task_id) && (
+                <div className="flex items-center gap-2 pl-6 text-[12px]">
+                    {entry.linked_commitment_id && actionContext?.commitment_content && (
+                        <button
+                            onClick={() => navigate(`/commitments/${entry.linked_commitment_id}`)}
+                            className="text-[#007aff] hover:text-[#0051d5] transition-colors"
+                        >
+                            {actionContext.commitment_content as string}
+                        </button>
+                    )}
+                    {entry.linked_task_id && (
+                        <span className="text-zinc-500">
+                            Task
+                        </span>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function MetadataBadges({ entry }: { entry: any }) {
     const badges = [];
+    const actionType = entry.action_type || entry.event_type;
     
-    if (entry.event_type) {
-        badges.push({ label: entry.event_type, color: 'blue', icon: null });
+    // Action type badge with colored icon
+    if (actionType) {
+        const { icon: ActionIcon } = getActionIconAndStyle(actionType);
+        let label = actionType;
+        if (actionType === 'done' || actionType === 'task_finish') label = 'Done';
+        else if (actionType === 'start' || actionType === 'task_start') label = 'Started';
+        else if (actionType === 'snooze' || actionType === 'task_snooze') label = 'Snoozed';
+        else if (actionType === 'skip' || actionType === 'task_skip') label = 'Skipped';
+        else label = actionType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+        
+        badges.push({ 
+            label, 
+            color: actionType === 'done' || actionType === 'task_finish' ? 'green' :
+                   actionType === 'start' || actionType === 'task_start' ? 'blue' :
+                   actionType === 'snooze' || actionType === 'task_snooze' ? 'amber' :
+                   actionType === 'skip' || actionType === 'task_skip' ? 'red' : 'purple',
+            icon: ActionIcon 
+        });
     }
-    if (entry.action_type) {
-        badges.push({ label: entry.action_type, color: 'purple', icon: null });
-    }
+    
+    // Feed badge
     if (entry.feed_item_id) {
-        badges.push({ label: 'Feed', color: 'amber', icon: Zap });
+        badges.push({ label: 'From Feed', color: 'amber', icon: Zap });
     }
+    
+    // Task link badge
     if (entry.linked_task_id) {
         badges.push({ label: 'Task', color: 'zinc', icon: Link2 });
     }
+    
+    // Commitment link badge
     if (entry.linked_commitment_id) {
         badges.push({ label: 'Commitment', color: 'zinc', icon: Link2 });
     }
@@ -214,9 +364,11 @@ function MetadataBadges({ entry }: { entry: any }) {
             {badges.map((badge, idx) => {
                 const Icon = badge.icon;
                 const colorClasses = {
-                    blue: 'bg-blue-50 text-blue-700 border-blue-100',
-                    purple: 'bg-purple-50 text-purple-700 border-purple-100',
-                    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+                    green: 'bg-green-50 text-green-700 border-green-200',
+                    blue: 'bg-blue-50 text-blue-700 border-blue-200',
+                    amber: 'bg-amber-50 text-amber-700 border-amber-200',
+                    red: 'bg-red-50 text-red-700 border-red-200',
+                    purple: 'bg-purple-50 text-purple-700 border-purple-200',
                     zinc: 'bg-zinc-50 text-zinc-600 border-zinc-100'
                 };
                 
@@ -230,78 +382,6 @@ function MetadataBadges({ entry }: { entry: any }) {
                     </span>
                 );
             })}
-        </div>
-    );
-}
-
-function EntryMetadata({ entry }: { entry: any }) {
-    const [showMetadata, setShowMetadata] = useState(false);
-    
-    const hasMetadata = entry.event_type || entry.action_type || entry.linked_task_id || 
-                       entry.linked_commitment_id || entry.feed_item_id || entry.action_context;
-    
-    if (!hasMetadata) return null;
-    
-    return (
-        <div className="mt-3">
-            <button
-                onClick={() => setShowMetadata(!showMetadata)}
-                className="flex items-center gap-2 text-[11px] text-zinc-400 hover:text-zinc-600 transition-colors"
-            >
-                {showMetadata ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                <span className="font-medium uppercase tracking-wide">Full Metadata</span>
-            </button>
-            
-            {showMetadata && (
-                <div className="mt-2 p-3 bg-zinc-50 rounded-xl border border-zinc-100 space-y-2 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex flex-wrap gap-2">
-                        {entry.event_type && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                                Event: {entry.event_type}
-                            </span>
-                        )}
-                        {entry.action_type && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                                Action: {entry.action_type}
-                            </span>
-                        )}
-                        {entry.feed_item_id && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex items-center gap-1">
-                                <Zap className="w-3 h-3" />
-                                From Feed
-                            </span>
-                        )}
-                    </div>
-                    
-                    {(entry.linked_task_id || entry.linked_commitment_id) && (
-                        <div className="flex items-center gap-2 text-[11px] text-zinc-600">
-                            <Link2 className="w-3 h-3 text-zinc-400" />
-                            {entry.linked_task_id && (
-                                <span>Task: <code className="text-[10px] bg-zinc-200 px-1 rounded">{entry.linked_task_id}</code></span>
-                            )}
-                            {entry.linked_task_id && entry.linked_commitment_id && <span>•</span>}
-                            {entry.linked_commitment_id && (
-                                <span>Commitment: <code className="text-[10px] bg-zinc-200 px-1 rounded">{entry.linked_commitment_id}</code></span>
-                            )}
-                        </div>
-                    )}
-                    
-                    {entry.feed_item_id && (
-                        <div className="text-[11px] text-zinc-500">
-                            Feed Item ID: <code className="text-[10px] bg-zinc-200 px-1 rounded">{entry.feed_item_id}</code>
-                        </div>
-                    )}
-                    
-                    {entry.action_context && (
-                        <div className="text-[11px] text-zinc-600">
-                            <div className="font-medium mb-1">Action Context:</div>
-                            <pre className="text-[10px] bg-zinc-200 p-2 rounded overflow-x-auto">
-                                {JSON.stringify(entry.action_context, null, 2)}
-                            </pre>
-                        </div>
-                    )}
-                </div>
-            )}
         </div>
     );
 }

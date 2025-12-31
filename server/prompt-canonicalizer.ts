@@ -41,6 +41,10 @@ export function canonicalizeEntries(entries: Entry[]): string {
     if (e.mood) obj.mood = e.mood;
     if (e.energy_level !== null && e.energy_level !== undefined) obj.energy_level = e.energy_level;
     
+    // Include feed item and action metadata for LLM context
+    if (e.feed_item_id) obj.feed_item_id = e.feed_item_id;
+    if (e.action_type) obj.action_type = e.action_type;
+    
     // Parse and sort payload keys
     if (e.payload_json) {
       try {
@@ -51,6 +55,19 @@ export function canonicalizeEntries(entries: Entry[]): string {
         }, {} as any);
       } catch {
         // If payload is invalid JSON, skip it
+      }
+    }
+    
+    // Parse and sort action_context keys (comprehensive metadata for LLM)
+    if (e.action_context) {
+      try {
+        const actionContext = JSON.parse(e.action_context);
+        obj.action_context = Object.keys(actionContext).sort().reduce((acc, k) => {
+          acc[k] = actionContext[k];
+          return acc;
+        }, {} as any);
+      } catch {
+        // If action_context is invalid JSON, skip it
       }
     }
     

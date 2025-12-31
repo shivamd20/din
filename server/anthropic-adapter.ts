@@ -198,8 +198,9 @@ export class AnthropicTextAdapter extends BaseTextAdapter<
                 usage: response.usage ? {
                     input_tokens: response.usage.input_tokens,
                     output_tokens: response.usage.output_tokens,
-                    cache_read_input_tokens: response.usage.cache_read_input_tokens,
-                    cache_creation_input_tokens: response.usage.cache_creation_input_tokens
+                    // Cache tokens are optional and may not be in the type definition
+                    cache_read_input_tokens: (response.usage as any).cache_read_input_tokens,
+                    cache_creation_input_tokens: (response.usage as any).cache_creation_input_tokens
                 } : undefined
             };
         } catch (error) {

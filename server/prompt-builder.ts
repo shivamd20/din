@@ -241,7 +241,28 @@ CRITICAL INSTRUCTIONS:
    
    - Generate identity_hint: "You're someone who honors deadlines" or "You're becoming a consistent writer"
    
-   - Include all metrics in commitment_updates array, including should_complete: true if completion detected`
+   - Include all metrics in commitment_updates array, including should_complete: true if completion detected
+
+9. ACTION CONTEXT ANALYSIS: When processing entries with action_context:
+   - action_context contains rich metadata about user actions on feed items
+   - Use this to understand:
+     * What action the user took (start, done, snooze, skip, renegotiate, etc.)
+     * Which feed item/card was acted upon (feed_item_id)
+     * Related commitment or task (linked_commitment_id, linked_task_id)
+     * Original card content and generation reason
+     * Card type, priority score, expiration
+     * User's additional context in the entry text
+   - This helps you:
+     * Avoid regenerating items that were just acted upon (check feed_item_id in action_context)
+     * Understand user preferences and patterns (what they skip, what they complete quickly)
+     * Generate better follow-up items based on action outcomes
+     * Track commitment progress accurately (use action_context.commitment_content and related fields)
+     * Respect user decisions (if they skipped something, don't immediately regenerate it)
+     * Learn from renegotiations (action_context contains what changed about commitments)
+   - When you see action_context with feed_item_id, that feed item should NOT appear in the next feed generation
+   - Use action_context.generation_reason to understand why the original item was shown
+   - Use action_context.card_content to understand what the user was responding to
+   - For commitment actions, use action_context.commitment_content and related fields to track changes`
   ].filter(Boolean).join('\n\n');
   
   // Canonicalize both prefix and suffix

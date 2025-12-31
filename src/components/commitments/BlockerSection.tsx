@@ -26,9 +26,18 @@ export function BlockerSection({ detectedBlockers, commitmentId }: BlockerSectio
         if (!userBlockers.includes(blocker) && !detectedBlockers.includes(blocker)) {
             setUserBlockers([...userBlockers, blocker]);
             // Open capture to log the blocker
-            openCapture(`Blocked on: ${blocker}`, {
+            const actionContext: Record<string, unknown> = {
+                action_taken: 'add_blocker',
+                action_title: 'Add Blocker',
+                commitment_id: commitmentId,
+                blocker: blocker,
+                guided_prompt: 'Add any additional context about this blocker...',
+            };
+            openCapture('', {
                 linked_commitment_id: commitmentId,
-            });
+                action_type: 'add_blocker',
+                action_context: actionContext,
+            }, 'Add Blocker');
         }
     };
 

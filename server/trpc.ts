@@ -4,6 +4,7 @@ import type { UserDO } from './UserDO';
 import type { Entry } from './UserDO';
 import type { WorkflowParams } from './SignalsWorkflow';
 import type { FeedWorkflowParams } from './FeedWorkflow';
+import type { TimelineData } from './services';
 
 export interface Context {
     userId: string;
@@ -91,7 +92,13 @@ export const appRouter = t.router({
                     attachments_json: e.attachments_json, // Frontend parses this
                     root_id: e.root_id,
                     parent_id: e.parent_id,
-                    // Legacy fields if needed
+                    // Metadata fields
+                    event_type: e.event_type,
+                    action_type: e.action_type,
+                    action_context: e.action_context,
+                    feed_item_id: e.feed_item_id,
+                    linked_task_id: e.linked_task_id,
+                    linked_commitment_id: e.linked_commitment_id,
                 }));
             }),
     }),
@@ -168,7 +175,7 @@ export const appRouter = t.router({
                 category: z.enum(['work', 'personal', 'health']).optional(),
                 time_horizon: z.enum(['week', 'month', 'quarter']).optional(),
             }))
-            .query(async ({ ctx, input }) => {
+            .query(async ({ ctx, input }): Promise<TimelineData> => {
                 return await ctx.userDO.getTimeline(ctx.userId, input);
             }),
     }),

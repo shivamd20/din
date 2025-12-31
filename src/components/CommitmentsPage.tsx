@@ -27,28 +27,61 @@ export default function CommitmentsPage() {
     ) || [];
 
     const handleAction = (action: string, commitment: typeof activeCommitments[0] | typeof completedCommitments[0]) => {
-        let prefillText = '';
+        let actionTitle: string | undefined;
         let eventType: 'commitment_acknowledge' | 'commitment_cancel' | undefined;
+        let guidedPrompt = '';
         
         switch (action) {
             case 'cancel':
-                prefillText = `Retiring ${commitment.content}. Why?`;
+                actionTitle = 'Retire Commitment';
                 eventType = 'commitment_cancel';
+                guidedPrompt = 'Why are you retiring this commitment?';
                 break;
             case 'renegotiate':
-                prefillText = `Renegotiating ${commitment.content}. What's changing?`;
+                actionTitle = 'Renegotiate Commitment';
+                guidedPrompt = 'What\'s changing about this commitment?';
                 // Renegotiation will be handled via capture text parsing
-                openCapture(prefillText, {
+                const renegotiateContext: Record<string, unknown> = {
+                    action_taken: 'renegotiate',
+                    action_title: actionTitle,
+                    commitment_id: commitment.id,
+                    commitment_content: commitment.content,
+                    commitment_status: commitment.status,
+                    guided_prompt: guidedPrompt,
+                    ...(commitment.time_horizon_type && { time_horizon_type: commitment.time_horizon_type }),
+                    ...(commitment.time_horizon_value && { time_horizon_value: commitment.time_horizon_value }),
+                    ...(commitment.cadence_days && { cadence_days: commitment.cadence_days }),
+                    ...(commitment.check_in_method && { check_in_method: commitment.check_in_method }),
+                };
+                openCapture('', {
                     linked_commitment_id: commitment.id,
-                });
+                    action_type: 'renegotiate',
+                    action_context: renegotiateContext,
+                }, actionTitle);
                 return;
         }
 
         if (eventType) {
-            openCapture(prefillText, {
+            // Build comprehensive action context
+            const actionContext: Record<string, unknown> = {
+                action_taken: action,
+                action_title: actionTitle,
+                commitment_id: commitment.id,
+                commitment_content: commitment.content,
+                commitment_status: commitment.status,
+                guided_prompt: guidedPrompt,
+                ...(commitment.time_horizon_type && { time_horizon_type: commitment.time_horizon_type }),
+                ...(commitment.time_horizon_value && { time_horizon_value: commitment.time_horizon_value }),
+                ...(commitment.cadence_days && { cadence_days: commitment.cadence_days }),
+                ...(commitment.check_in_method && { check_in_method: commitment.check_in_method }),
+            };
+            
+            openCapture('', {
                 event_type: eventType,
                 linked_commitment_id: commitment.id,
-            });
+                action_type: action,
+                action_context: actionContext,
+            }, actionTitle);
         }
     };
 
